@@ -25,7 +25,8 @@ flowchart LR
 ## Install
 
 ```
-claude plugin install github:dylangroos/claude-kanban
+/plugin marketplace add dylangroos/claude-kanban
+/plugin install kanban
 ```
 
 ## Setup
