@@ -1,10 +1,14 @@
 {
   "name": "dylangroos-claude-kanban",
   "description": "Filesystem-based kanban board for Claude Code",
+  "owner": {
+    "name": "Dylan Groos"
+  },
   "plugins": [
     {
       "name": "kanban",
-      "path": "."
+      "source": ".",
+      "description": "Filesystem-based kanban board for tracking tasks"
     }
   ]
 }
