@@ -4,13 +4,6 @@ Filesystem-based kanban board for Claude Code. No servers, just folders.
 
 ## Install
 
-**Option 1: Plugin marketplace (recommended)**
-```
-claude plugin marketplace add dylangroos/claude-kanban
-claude plugin install kanban
-```
-
-**Option 2: Direct from GitHub**
 ```
 claude plugin install github:dylangroos/claude-kanban
 ```

@@ -4,10 +4,8 @@
 
 ### 1. Plugin Installation (recommended)
 
-Install via marketplace:
 ```bash
-claude plugin marketplace add <marketplace-name>
-claude plugin install kanban
+claude plugin install github:dylangroos/claude-kanban
 ```
 
 The plugin's `hooks/hooks.json` is automatically loaded. Uses `${CLAUDE_PLUGIN_ROOT}` for portable paths.
