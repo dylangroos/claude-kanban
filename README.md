@@ -28,8 +28,6 @@ flowchart LR
 claude plugin install github:dylangroos/claude-kanban
 ```
 
-The plugin includes a `UserPromptSubmit` hook that automatically injects board context on every prompt - Claude will use the board when you mention tasks.
-
 ## Setup
 
 After installing the plugin, initialize a board in your project:
