@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "kanban",
-      "source": ".",
+      "source": "./",
       "description": "Filesystem-based kanban board for tracking tasks"
     }
   ]
