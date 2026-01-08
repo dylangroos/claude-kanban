@@ -4,14 +4,22 @@ Filesystem-based kanban board for Claude Code. No servers, just folders.
 
 ## Install
 
+**Option 1: Plugin marketplace (recommended)**
 ```
-/plugin marketplace add dylangroos/claude-kanban
-/plugin install kanban@dylangroos-claude-kanban
+claude plugin marketplace add dylangroos/claude-kanban
+claude plugin install kanban
 ```
+
+**Option 2: Direct from GitHub**
+```
+claude plugin install github:dylangroos/claude-kanban
+```
+
+The plugin includes a `UserPromptSubmit` hook that automatically injects board context on every prompt - Claude will use the board when you mention tasks.
 
 ## Setup
 
-In your project:
+After installing the plugin, initialize a board in your project:
 ```
 /kanban-init
 ```
@@ -57,13 +65,23 @@ p: high
 Users can't log in on Safari.
 ```
 
+## Agents
+
+**task-planner** - Break down big features into cards:
+- "plan out the authentication system"
+- "break this feature into tasks"
+
+**standup** - Get a status report:
+- "what's the status?"
+- "give me a standup"
+
 ## Why
 
 - Zero infrastructure
 - Human-readable (just browse the folders)
 - Git-friendly (branch boards, track changes)
 - Works offline
-- Agents already know how to use files
+- Auto-context hook makes board salient to Claude
 
 ## License
 
