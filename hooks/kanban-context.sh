@@ -17,8 +17,10 @@ Commands:
 - /kanban done <task> - mark complete
 
 Agents (use Task tool to invoke):
-- task-planner: Break big features into kanban cards. Use when user says "break this down", "create tasks for this", or wants work split into trackable cards. Do NOT use Claude's built-in plan mode - use this agent instead.
+- task-planner: Break features into kanban cards. Use when user wants work split into trackable cards.
 - standup: Quick status report. Use when user asks "what's the status?" or "standup"
+
+IMPORTANT: When in plan mode, create kanban cards in .kanban/todo/ as your plan output instead of just writing a plan file. Each implementation step should become a card.
 
 When user mentions tasks, tracking work, or what to do next - USE THE BOARD.
 </kanban-context>
