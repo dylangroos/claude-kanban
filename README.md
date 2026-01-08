@@ -2,6 +2,26 @@
 
 Filesystem-based kanban board for Claude Code. No servers, just folders.
 
+```mermaid
+flowchart LR
+    subgraph Your Project
+        direction TB
+        todo[".kanban/todo/"]
+        doing[".kanban/doing/"]
+        done[".kanban/done/"]
+    end
+
+    User -->|prompt| Hook
+    Hook -->|injects board context| Claude
+    Claude -->|read/write/move| todo
+    Claude -->|read/write/move| doing
+    Claude -->|read/write/move| done
+
+    style todo fill:#f9d77e
+    style doing fill:#7ec8f9
+    style done fill:#7ef99d
+```
+
 ## Install
 
 ```
