@@ -1,0 +1,10 @@
+{
+  "name": "dylangroos-claude-kanban",
+  "description": "Filesystem-based kanban board for Claude Code",
+  "plugins": [
+    {
+      "name": "kanban",
+      "path": "."
+    }
+  ]
+}
