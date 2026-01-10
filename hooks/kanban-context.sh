@@ -15,6 +15,7 @@ Commands:
 - /kanban - view board
 - /kanban add <task> - add card to todo
 - /kanban done <task> - mark complete
+- /kanban work <feature> - break into cards and implement with subagents
 
 Agents (use Task tool to invoke):
 - task-planner: Break features into kanban cards. Use when user wants work split into trackable cards.
