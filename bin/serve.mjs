@@ -27,6 +27,7 @@ function findBoard() {
 }
 
 const BOARD = findBoard();
+const PROJECT = basename(resolve(BOARD, ".."));
 
 // Ensure board dirs exist
 for (const col of COLUMNS) {
@@ -111,7 +112,9 @@ const server = createServer(async (req, res) => {
   try {
     // API: GET /api/board
     if (path === "/api/board" && req.method === "GET") {
-      return json(res, await getBoard());
+      const b = await getBoard();
+      b.project = PROJECT;
+      return json(res, b);
     }
 
     // API: POST /api/cards  { title, body?, priority?, column? }
