@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>.kanban</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;
+  --muted:#8b949e;--accent:#58a6ff;--green:#3fb950;
+  --red:#f85149;--card:#1c2128;--card-hover:#22272e;
+}
+html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text)}
+
+header{padding:16px 24px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)}
+header h1{font-size:16px;font-weight:600;letter-spacing:-.3px}
+header .dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+header .meta{margin-left:auto;font-size:12px;color:var(--muted)}
+
+.board{display:grid;grid-template-columns:repeat(3,1fr);height:calc(100vh - 57px);overflow:hidden;position:relative}
+.column{display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden}
+.column:last-child{border-right:none}
+
+.col-header{padding:12px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);flex-shrink:0}
+.col-header .ind{width:10px;height:10px;border-radius:3px}
+.col-header h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.col-header .n{font-size:12px;color:var(--muted);margin-left:auto;background:var(--surface);padding:1px 7px;border-radius:10px}
+.col-header .add{margin-left:4px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:0 4px;border-radius:4px}
+.col-header .add:hover{color:var(--text);background:var(--border)}
+.col-todo .ind{background:var(--muted)} .col-doing .ind{background:var(--accent)} .col-done .ind{background:var(--green)}
+
+.cards{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
+.cards::-webkit-scrollbar{width:4px}
+.cards::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.column.drag-over .cards{background:rgba(88,166,255,.04)}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:grab;position:relative;transition:border-color .1s}
+.card:hover{background:var(--card-hover);border-color:#444c56}
+.card.dragging{opacity:.5}
+.card.sel{border-color:var(--accent)}
+.card .t{font-size:13px;font-weight:500;line-height:1.4}
+.card .b{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .b h1,.card .b h2,.card .b h3{font-size:12px;font-weight:600;margin:0;padding:0;border:none;color:var(--muted)}
+.card .b p{margin:0}.card .b pre,.card .b hr,.card .b blockquote{display:none}
+.card .b code{font-size:11px;background:var(--surface);padding:0 3px;border-radius:2px}
+.card .hi{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;margin-top:6px;text-transform:uppercase;background:rgba(248,81,73,.15);color:var(--red)}
+.card .acts{position:absolute;top:6px;right:6px;display:none;gap:2px}
+.card:hover .acts{display:flex}
+.card .acts button{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 5px;border-radius:3px;font-size:12px}
+.card .acts button:hover{background:var(--border);color:var(--text)}
+
+.add-form{background:var(--card);border:1px solid var(--accent);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.add-form input,.add-form textarea{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font:inherit;font-size:13px;outline:none;resize:none}
+.add-form input:focus,.add-form textarea:focus{border-color:var(--accent)}
+.add-form .row{display:flex;gap:6px}
+.add-form .row button{padding:4px 12px;border-radius:4px;border:none;font-size:12px;cursor:pointer;font-weight:500}
+.btn-p{background:var(--accent);color:#fff}.btn-g{background:var(--border);color:var(--text)}
+
+/* Panel — absolute overlay on right 2/3 */
+.panel{position:absolute;top:0;right:0;bottom:0;width:66.667%;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .15s ease;z-index:10}
+.panel.open{transform:translateX(0)}
+
+.panel-head{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.panel-head .back{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:5px;font-size:12px;cursor:pointer}
+.panel-head .back:hover{color:var(--text);border-color:#444c56}
+.panel-head h3{flex:1;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{font-size:10px;padding:2px 8px;border-radius:4px;text-transform:uppercase;font-weight:600;letter-spacing:.3px}
+.tag.todo{background:rgba(139,148,158,.15);color:var(--muted)}
+.tag.doing{background:rgba(88,166,255,.15);color:var(--accent)}
+.tag.done{background:rgba(63,185,80,.15);color:var(--green)}
+.panel-head .ed{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer}
+.panel-head .ed:hover,.panel-head .ed.on{color:var(--text);border-color:var(--accent);background:rgba(88,166,255,.1)}
+
+.panel-body{flex:1;overflow-y:auto;padding:24px 28px}
+.panel-body::-webkit-scrollbar{width:5px}
+.panel-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+.panel-body textarea{width:100%;min-height:300px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;color:var(--text);font-family:'SF Mono',Consolas,monospace;font-size:13px;outline:none;resize:vertical;line-height:1.6;display:none}
+.panel-body textarea:focus{border-color:var(--accent)}
+.panel-body.editing textarea{display:block}
+.panel-body.editing .md{display:none}
+
+.md{font-size:14px;line-height:1.75;color:var(--text)}
+.md h1{font-size:20px;font-weight:600;margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.md h2{font-size:16px;font-weight:600;margin:20px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--border)}
+.md h3{font-size:14px;font-weight:600;margin:16px 0 6px}
+.md p{margin:0 0 12px}
+.md ul,.md ol{margin:0 0 12px;padding-left:22px}
+.md li{margin:3px 0}
+.md code{background:var(--card);padding:2px 6px;border-radius:4px;font-family:'SF Mono',Consolas,monospace;font-size:13px}
+.md pre{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin:0 0 12px;overflow-x:auto}
+.md pre code{background:none;padding:0;font-size:12.5px;line-height:1.55}
+.md strong{font-weight:600}.md em{font-style:italic;color:var(--muted)}
+.md a{color:var(--accent);text-decoration:none}.md a:hover{text-decoration:underline}
+.md blockquote{border-left:3px solid var(--accent);padding:2px 0 2px 14px;color:var(--muted);margin:0 0 12px}
+.md hr{border:none;border-top:1px solid var(--border);margin:16px 0}
+
+.panel-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-shrink:0}
+.panel-foot .moves{display:flex;gap:4px}
+.panel-foot .moves button{padding:4px 10px;font-size:11px;border-radius:5px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer}
+.panel-foot .moves button:hover{color:var(--text);border-color:#444c56;background:var(--card)}
+.panel-foot label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer}
+.panel-foot label input{accent-color:var(--accent)}
+.panel-foot .sp{flex:1}
+.panel-foot .del{padding:6px 14px;border-radius:6px;border:none;font-size:12px;cursor:pointer;font-weight:500;background:rgba(248,81,73,.15);color:var(--red)}
+.panel-foot .sav{padding:6px 14px;border-radius:6px;border:none;font-size:12px;cursor:pointer;font-weight:500;background:var(--accent);color:#fff;display:none}
+
+.empty{text-align:center;padding:32px 16px;color:var(--border);font-size:13px}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--surface);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;z-index:200;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <div class="dot"></div>
+  <h1>.kanban</h1>
+  <span class="meta" id="meta"></span>
+</header>
+<div class="board" id="board">
+  <div class="column col-todo" data-col="todo">
+    <div class="col-header"><div class="ind"></div><h2>Todo</h2><span class="n" id="n-todo">0</span><button class="add" onclick="addForm('todo')">+</button></div>
+    <div class="cards" id="c-todo"></div>
+  </div>
+  <div class="column col-doing" data-col="doing">
+    <div class="col-header"><div class="ind"></div><h2>Doing</h2><span class="n" id="n-doing">0</span><button class="add" onclick="addForm('doing')">+</button></div>
+    <div class="cards" id="c-doing"></div>
+  </div>
+  <div class="column col-done" data-col="done">
+    <div class="col-header"><div class="ind"></div><h2>Done</h2><span class="n" id="n-done">0</span><button class="add" onclick="addForm('done')">+</button></div>
+    <div class="cards" id="c-done"></div>
+  </div>
+  <div class="panel" id="panel">
+    <div class="panel-head">
+      <button class="back" onclick="close_()">&#8592;</button>
+      <h3 id="p-title"></h3>
+      <span class="tag" id="p-tag"></span>
+      <button class="ed" id="p-ed" onclick="togEdit()">Edit</button>
+    </div>
+    <div class="panel-body" id="p-body">
+      <div class="md" id="p-md"></div>
+      <textarea id="p-ta"></textarea>
+    </div>
+    <div class="panel-foot">
+      <div class="moves" id="p-mv"></div>
+      <label><input type="checkbox" id="p-pri"> High priority</label>
+      <div class="sp"></div>
+      <button class="del" id="p-del">Delete</button>
+      <button class="sav" id="p-sav">Save</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+let B={},prev='',cur=null,curCol=null,editing=false,drag=null,dragCol=null;
+const cols=['todo','doing','done'];
+const $=id=>document.getElementById(id);
+
+async function load(){
+  const r=await fetch('/api/board');
+  const j=await r.json();
+  const s=JSON.stringify(j);
+  if(s===prev)return;
+  prev=s;B=j;render();
+}
+
+function render(){
+  for(const c of cols){
+    const cards=B[c]||[];
+    $('n-'+c).textContent=cards.length;
+    const el=$('c-'+c);
+    el.innerHTML=cards.length?cards.map(x=>card(x,c)).join(''):'<div class="empty">Drop here</div>';
+  }
+  const total=cols.reduce((a,c)=>(B[c]||[]).length+a,0);
+  $('meta').textContent=total+' cards';
+  bindDrag();
+}
+
+function card(c,col){
+  const sel=cur===c.id?' sel':'';
+  const hi=c.priority==='high'?'<div class="hi">high</div>':'';
+  const body=c.body?'<div class="b">'+md(c.body)+'</div>':'';
+  const L=col!=='todo'?`<button onclick="ev(event);mv('${c.id}','${col}','${cols[cols.indexOf(col)-1]}')">&larr;</button>`:'';
+  const R=col!=='done'?`<button onclick="ev(event);mv('${c.id}','${col}','${cols[cols.indexOf(col)+1]}')">&rarr;</button>`:'';
+  return`<div class="card${sel}" draggable="true" data-id="${c.id}" data-col="${col}" onclick="open_('${c.id}','${col}')"><div class="acts">${L}${R}</div><div class="t">${esc(c.id.replace(/-/g,' '))}</div>${body}${hi}</div>`;
+}
+function ev(e){e.stopPropagation()}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+// markdown
+function md(s){
+  let h='',lines=s.split('\n'),i=0;
+  while(i<lines.length){
+    const l=lines[i];
+    if(l.startsWith('```')){let c='';i++;while(i<lines.length&&!lines[i].startsWith('```')){c+=esc(lines[i])+'\n';i++}i++;h+='<pre><code>'+c+'</code></pre>';continue}
+    const hm=l.match(/^(#{1,3})\s+(.+)/);
+    if(hm){h+=`<h${hm[1].length}>${il(hm[2])}</h${hm[1].length}>`;i++;continue}
+    if(/^(-{3,}|\*{3,}|_{3,})\s*$/.test(l)){h+='<hr>';i++;continue}
+    if(l.startsWith('> ')){h+='<blockquote>'+il(l.slice(2))+'</blockquote>';i++;continue}
+    if(/^[-*]\s/.test(l)){h+='<ul>';while(i<lines.length&&/^[-*]\s/.test(lines[i])){h+='<li>'+il(lines[i].replace(/^[-*]\s+/,''))+'</li>';i++}h+='</ul>';continue}
+    if(/^\d+\.\s/.test(l)){h+='<ol>';while(i<lines.length&&/^\d+\.\s/.test(lines[i])){h+='<li>'+il(lines[i].replace(/^\d+\.\s+/,''))+'</li>';i++}h+='</ol>';continue}
+    if(!l.trim()){i++;continue}
+    h+='<p>'+il(l)+'</p>';i++;
+  }
+  return h;
+}
+function il(s){return esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank">$1</a>')}
+
+// drag
+function bindDrag(){
+  document.querySelectorAll('.card').forEach(el=>{
+    el.ondragstart=e=>{drag=el.dataset.id;dragCol=el.dataset.col;el.classList.add('dragging');e.dataTransfer.effectAllowed='move'};
+    el.ondragend=()=>{el.classList.remove('dragging');document.querySelectorAll('.column').forEach(c=>c.classList.remove('drag-over'));drag=null}
+  });
+  document.querySelectorAll('.cards').forEach(el=>{
+    el.ondragover=e=>{e.preventDefault();el.closest('.column').classList.add('drag-over')};
+    el.ondragleave=e=>{el.closest('.column').classList.remove('drag-over')};
+    el.ondrop=e=>{e.preventDefault();const to=el.closest('.column').dataset.col;document.querySelectorAll('.column').forEach(c=>c.classList.remove('drag-over'));if(drag&&dragCol!==to)mv(drag,dragCol,to)}
+  });
+}
+
+async function mv(id,from,to){
+  await fetch(`/api/cards/${encodeURIComponent(id)}/move`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({from,to})});
+  notify(id.replace(/-/g,' ')+' → '+to);
+  if(cur===id){curCol=to;panelMeta()}
+  prev='';load();
+}
+
+// panel
+function open_(id,col){
+  if(cur===id){close_();return}
+  cur=id;curCol=col;editing=false;
+  const c=(B[col]||[]).find(x=>x.id===id);if(!c)return;
+  $('panel').classList.add('open');
+  $('p-title').textContent=id.replace(/-/g,' ');
+  $('p-md').innerHTML=md(c.body||'');
+  $('p-ta').value=c.body||'';
+  $('p-pri').checked=c.priority==='high';
+  $('p-body').classList.remove('editing');
+  $('p-ed').classList.remove('on');$('p-ed').textContent='Edit';
+  $('p-sav').style.display='none';
+  panelMeta();
+  document.querySelectorAll('.card').forEach(x=>x.classList.toggle('sel',x.dataset.id===id));
+}
+function panelMeta(){
+  const tag=$('p-tag');tag.textContent=curCol;tag.className='tag '+curCol;
+  const ci=cols.indexOf(curCol);let b='';
+  if(ci>0)b+=`<button onclick="mv('${cur}','${curCol}','${cols[ci-1]}')">&larr; ${cols[ci-1]}</button>`;
+  if(ci<2)b+=`<button onclick="mv('${cur}','${curCol}','${cols[ci+1]}')">${cols[ci+1]} &rarr;</button>`;
+  $('p-mv').innerHTML=b;
+}
+function close_(){
+  cur=null;curCol=null;editing=false;
+  $('panel').classList.remove('open');
+  document.querySelectorAll('.card.sel').forEach(x=>x.classList.remove('sel'));
+}
+function togEdit(){
+  editing=!editing;
+  const b=$('p-body'),btn=$('p-ed'),sav=$('p-sav');
+  if(editing){b.classList.add('editing');btn.classList.add('on');btn.textContent='Preview';sav.style.display='';$('p-ta').focus()}
+  else{$('p-md').innerHTML=md($('p-ta').value);b.classList.remove('editing');btn.classList.remove('on');btn.textContent='Edit';sav.style.display='none'}
+}
+$('p-sav').onclick=async()=>{
+  if(!cur)return;
+  const body=$('p-ta').value.trim(),pri=$('p-pri').checked?'high':'';
+  await fetch(`/api/cards/${encodeURIComponent(cur)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({body,priority:pri})});
+  notify('Saved');editing=false;$('p-body').classList.remove('editing');$('p-ed').classList.remove('on');$('p-ed').textContent='Edit';$('p-sav').style.display='none';
+  $('p-md').innerHTML=md(body);prev='';load();
+};
+$('p-del').onclick=async()=>{
+  if(!cur||!confirm('Delete "'+cur.replace(/-/g,' ')+'"?'))return;
+  await fetch(`/api/cards/${encodeURIComponent(cur)}`,{method:'DELETE'});
+  notify('Deleted');close_();prev='';load();
+};
+
+function addForm(col){
+  const el=$('c-'+col);document.querySelectorAll('.add-form').forEach(f=>f.remove());
+  const d=document.createElement('div');d.className='add-form';
+  d.innerHTML='<input placeholder="Card title..." id="af-t"><textarea placeholder="Description (optional)" rows=2 id="af-b"></textarea><div class="row"><button class="btn-p" onclick="submitC(\''+col+'\')">Add</button><button class="btn-g" onclick="this.closest(\'.add-form\').remove()">Cancel</button></div>';
+  el.prepend(d);d.querySelector('input').focus();
+  d.querySelector('input').onkeydown=e=>{if(e.key==='Enter')submitC(col);if(e.key==='Escape')d.remove()};
+}
+async function submitC(col){
+  const t=$('af-t')?.value?.trim(),b=$('af-b')?.value?.trim();if(!t)return;
+  await fetch('/api/cards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t,body:b||t,column:col})});
+  notify('Added "'+t+'"');prev='';load();
+}
+
+document.onkeydown=e=>{if(e.key==='Escape')close_()};
+function notify(m){const el=$('toast');el.textContent=m;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1500)}
+
+load();setInterval(load,3000);
+</script>
+</body>
+</html>
