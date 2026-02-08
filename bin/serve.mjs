@@ -5,6 +5,7 @@ import { readdir, readFile, rename, writeFile, unlink, mkdir } from "node:fs/pro
 import { join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
+import { exec } from "node:child_process";
 
 const COLUMNS = ["todo", "doing", "done"];
 const PORT = parseInt(process.env.PORT || "4040", 10);
@@ -186,5 +187,11 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`\n  kanban board → http://localhost:${PORT}\n  watching ${BOARD}\n`);
+  const url = `http://localhost:${PORT}`;
+  console.log(`\n  ${PROJECT} / .kanban → ${url}\n`);
+  // Auto-open browser (best-effort, silent fail)
+  if (!process.env.NO_OPEN) {
+    const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+    exec(`${cmd} ${url}`);
+  }
 });

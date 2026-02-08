@@ -1,6 +1,6 @@
 ---
 description: View and manage the kanban board
-argument-hint: [add|done|move|work] [task]
+argument-hint: [add|done|move|work|ui] [task]
 ---
 
 Args: "$ARGUMENTS"
@@ -12,6 +12,12 @@ Args: "$ARGUMENTS"
 **done <task>**: Move to `.kanban/done/`
 
 **move <task> <column>**: Move to that column (todo/doing/done)
+
+**ui**: Launch the web UI. Use the Bash tool with `run_in_background: true` to run:
+```
+node $CLAUDE_PLUGIN_ROOT/bin/serve.mjs
+```
+This starts a local server at http://localhost:4040 (or $PORT) that auto-opens the browser. Tell the user the board is live and they can manage cards visually. The server runs in the background — changes sync both ways with the .kanban/ folder every 3 seconds.
 
 **work <feature description>**: Full automation pipeline:
 1. Use Task tool to invoke `task-planner` agent - break the feature into kanban cards
