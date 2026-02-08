@@ -1,0 +1,14 @@
+{
+  "name": "claude-kanban",
+  "version": "1.0.0",
+  "description": "Lightweight web UI for .kanban/ boards",
+  "bin": {
+    "claude-kanban": "./bin/serve.mjs"
+  },
+  "type": "module",
+  "license": "MIT",
+  "author": "Dylan Groos",
+  "repository": "https://github.com/dylangroos/claude-kanban",
+  "keywords": ["kanban", "claude", "cli", "tasks"],
+  "files": ["bin/", "ui/"]
+}
