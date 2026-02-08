@@ -1,50 +1,54 @@
 # Claude Kanban
 
-Filesystem-based kanban board for Claude Code. No servers, just folders.
+Filesystem-based kanban board for Claude Code. No servers, no databases, just folders and markdown files.
 
-```mermaid
-flowchart LR
-    subgraph Your Project
-        direction TB
-        todo[".kanban/todo/"]
-        doing[".kanban/doing/"]
-        done[".kanban/done/"]
-    end
-
-    User -->|prompt| Hook
-    Hook -->|injects board context| Claude
-    Claude -->|read/write/move| todo
-    Claude -->|read/write/move| doing
-    Claude -->|read/write/move| done
-
-    style todo fill:#f9d77e
-    style doing fill:#7ec8f9
-    style done fill:#7ef99d
+```
+.kanban/
+├── todo/           fix-login-bug.md
+├── doing/          refactor-api.md
+└── done/           setup-eslint.md
 ```
 
 ## Install
+
+### Claude Code Plugin
 
 ```
 /plugin marketplace add dylangroos/claude-kanban
 /plugin install kanban
 ```
 
-## Setup
+### Standalone (npx)
 
-After installing the plugin, initialize a board in your project:
 ```
-/kanban-init
+npx dot-kanban
 ```
 
-Or manually: `mkdir -p .kanban/{todo,doing,done}`
+Runs a local web UI at `localhost:4040`. Zero dependencies.
 
-## Use
+## Web UI
+
+Launch the visual board from Claude or standalone:
+
+```
+/kanban ui                          # from Claude Code
+npx dot-kanban                      # from any terminal
+npx dot-kanban ~/path/to/project    # point at a specific project
+```
+
+- Drag-and-drop cards between columns
+- Click to open full markdown preview
+- Add, edit, delete cards from the browser
+- Auto-syncs with `.kanban/` folder every 3s
+
+## CLI Commands
 
 ```
 /kanban              # view board
-/kanban add <task>   # add task
-/kanban done <task>  # mark done
+/kanban add <task>   # add card to todo
+/kanban done <task>  # mark complete
 /kanban move <task> doing
+/kanban ui           # open web UI
 ```
 
 Or natural language:
@@ -52,29 +56,31 @@ Or natural language:
 - "add a task to fix the login"
 - "move refactor-api to done"
 
-## Structure
+## Setup
+
+Initialize a board in any project:
 
 ```
-.kanban/
-├── todo/              # to do
-├── doing/             # in progress
-└── done/              # complete
+/kanban-init
 ```
+
+Or manually: `mkdir -p .kanban/{todo,doing,done}`
 
 ## Cards
 
-Filename = task (`fix-bug.md`). Content = description.
+Each card is a markdown file. Filename = task name (`fix-bug.md`). Content = description with full markdown support.
 
 ```markdown
-Users can't log in on Safari.
+Users can't log in on Safari. Check cookie settings.
 ```
 
 Optional priority:
+
 ```markdown
 ---
 p: high
 ---
-Users can't log in on Safari.
+Users on Safari get stuck in redirect loop after OAuth login.
 ```
 
 ## Agents
@@ -83,17 +89,18 @@ Users can't log in on Safari.
 - "plan out the authentication system"
 - "break this feature into tasks"
 
-**standup** - Get a status report:
+**standup** - Quick status report:
 - "what's the status?"
 - "give me a standup"
 
 ## Why
 
-- Zero infrastructure
-- Human-readable (just browse the folders)
-- Git-friendly (branch boards, track changes)
-- Works offline
-- Auto-context hook makes board salient to Claude
+- **Zero infrastructure** - just folders and `.md` files
+- **Human-readable** - browse cards in your file explorer or editor
+- **Git-friendly** - branch boards, track changes, review diffs
+- **Works offline** - no network, no accounts
+- **Two interfaces** - CLI via Claude Code, visual via web UI
+- **Auto-context** - hook injects board state into every Claude prompt
 
 ## License
 
