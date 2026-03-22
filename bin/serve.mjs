@@ -72,7 +72,7 @@ async function getBoard() {
         id: f.replace(/\.md$/, ""),
         file: f,
         body,
-        priority: meta.p || null,
+        priority: meta.priority || meta.p || null,
       });
     }
   }
@@ -125,7 +125,7 @@ const server = createServer(async (req, res) => {
       const slug = slugify(data.title || "untitled");
       const file = `${slug}.md`;
       const meta = {};
-      if (data.priority) meta.p = data.priority;
+      if (data.priority) meta.priority = data.priority;
       await writeFile(join(BOARD, col, file), toFrontmatter(meta, data.body || data.title || ""));
       return json(res, { ok: true, id: slug }, 201);
     }
@@ -154,7 +154,7 @@ const server = createServer(async (req, res) => {
       const raw = await readFile(join(BOARD, found, file));
       const parsed = parseFrontmatter(raw);
       const meta = { ...parsed.meta };
-      if ("priority" in data) meta.p = data.priority || "";
+      if ("priority" in data) { meta.priority = data.priority || ""; delete meta.p; }
       const newBody = "body" in data ? data.body : parsed.body;
       await writeFile(join(BOARD, found, file), toFrontmatter(meta, newBody));
       return json(res, { ok: true });
