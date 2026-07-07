@@ -100,7 +100,7 @@ export function createAgentManager({ board, repoRoot }) {
     ].join("\n");
     const child = spawn(bin, [
       "-p", `${card.title}\n\n${card.body || ""}`,
-      "--output-format", "stream-json",
+      "--output-format", "stream-json", "--verbose",
       "--permission-mode", "acceptEdits",
       "--allowedTools", TOOLS,
       "--append-system-prompt", briefing,
