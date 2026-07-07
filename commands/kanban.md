@@ -21,8 +21,8 @@ This starts a local server at http://localhost:4040 (or $PORT) that auto-opens t
 
 **work <feature description>**: Full automation pipeline:
 1. Use Task tool to invoke `task-planner` agent - break the feature into kanban cards under one project folder named after the feature
-2. For each card created in `.kanban/todo/`, spawn a subagent (using Task tool) to implement it
+2. For each card created in `.kanban/todo/<project>/`, spawn a subagent (using Task tool) to implement it
 3. As each subagent completes, move its card to `.kanban/done/`
-4. Show final board status
+4. Show final board status, grouped by project
 
 Task names can be partial. If no `.kanban/`, say: run `/kanban-init`

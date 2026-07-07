@@ -71,7 +71,7 @@ The core requirement: humans never have to tag cards. Instruction files updated:
 - **Collisions never overwrite and never fail:** if a create, move, or reassign would land on an existing file, the server picks the next free slug (`fix-login-bug` → `fix-login-bug-2`, `-3`, …) and returns the new id; the UI notes the rename in its toast. Reassigns are ordered write-new-then-delete-old, so a mid-operation failure can duplicate a card but never lose one.
 - Deleting a project's last card removes it from filters (derived) and its directory (cleanup).
 - Manual `git mv` reorganizing works — everything re-derives from the tree.
-- Non-kebab-case or deeply nested directories: ignored by the server, documented as unsupported.
+- Directories nested deeper than one level are ignored, and nested composite ids are rejected. Any non-dot directory name is surfaced as a project as-is; projects created through the API are always slugified to kebab-case.
 
 ## Testing & verification
 
