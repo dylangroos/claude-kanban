@@ -1,0 +1,21 @@
+#!/usr/bin/env node
+// Fake claude CLI for deterministic e2e tests. Mimics: claude -p <prompt> --output-format stream-json ...
+import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+
+const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
+const prompt = process.argv[process.argv.indexOf("-p") + 1] || "";
+
+out({ type: "system", subtype: "init", session_id: "fake-session-123" });
+out({ type: "assistant", message: { content: [{ type: "text", text: `Working on: ${prompt.split("\n")[0]}` }] } });
+
+if (process.env.FAKE_CLAUDE_FAIL === "1") {
+  process.stderr.write("Permission denied: Bash(curl *) is not allowed\n");
+  process.exit(2);
+}
+
+out({ type: "assistant", message: { content: [{ type: "tool_use", name: "Edit", id: "t1", input: {} }] } });
+writeFileSync("fake-work.txt", `done: ${prompt.split("\n")[0]}\n`);
+execFileSync("git", ["add", "fake-work.txt"]);
+execFileSync("git", ["commit", "-m", "fake: complete card work"], { env: { ...process.env, GIT_AUTHOR_NAME: "fake", GIT_AUTHOR_EMAIL: "f@ke", GIT_COMMITTER_NAME: "fake", GIT_COMMITTER_EMAIL: "f@ke" } });
+out({ type: "result", subtype: "success", session_id: "fake-session-123", total_cost_usd: 0.0123, result: "Implemented the card: created fake-work.txt and committed it. Verified by inspection." });
