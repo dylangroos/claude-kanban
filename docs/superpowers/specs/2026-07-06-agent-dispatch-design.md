@@ -40,7 +40,7 @@ Spawn per card (Node `child_process.spawn`, zero new dependencies), with `cwd` s
 
 ```
 claude -p "<card title>\n\n<card body>" \
-  --output-format stream-json \
+  --output-format stream-json --verbose \
   --permission-mode acceptEdits \
   --allowedTools "Bash(git *),Bash(npm test*),Bash(npm run *),Bash(node *)" \
   --append-system-prompt "<dispatch briefing>"
