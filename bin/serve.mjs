@@ -6,6 +6,7 @@ import { join, resolve, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { exec } from "node:child_process";
+import { createAgentManager } from "./agents.mjs";
 
 const COLUMNS = ["todo", "doing", "done"];
 const PORT = parseInt(process.env.PORT || "4040", 10);
@@ -38,6 +39,10 @@ for (const col of COLUMNS) {
   const dir = join(BOARD, col);
   if (!existsSync(dir)) await mkdir(dir, { recursive: true });
 }
+
+const REPO_ROOT = resolve(BOARD, "..");
+const agents = AGENTS ? createAgentManager({ board: BOARD, repoRoot: REPO_ROOT }) : null;
+if (agents) await agents.init();
 
 // Parse simple YAML frontmatter
 function parseFrontmatter(raw) {
@@ -159,6 +164,7 @@ const server = createServer(async (req, res) => {
       const b = await getBoard();
       b.project = PROJECT;
       b.agents = AGENTS;
+      if (agents) b.sessions = await agents.sessions();
       return json(res, b);
     }
 
@@ -237,6 +243,73 @@ const server = createServer(async (req, res) => {
         }
       }
       return json(res, { error: "not found" }, 404);
+    }
+
+    // API: POST /api/cards/:id/work — dispatch an agent on a todo card
+    if (AGENTS && path.match(/^\/api\/cards\/[^/]+\/work$/) && req.method === "POST") {
+      const id = decodeURIComponent(path.split("/")[3]);
+      const src = cardPath("todo", id);
+      if (!existsSync(src)) return json(res, { error: "card not in todo" }, 404);
+      const { project, slug } = splitId(id);
+      const { body: cardBody } = parseFrontmatter(await readFile(src));
+      const dst = cardPath("doing", id);
+      await mkdir(dirname(dst), { recursive: true });
+      await rename(src, dst);
+      await pruneEmpty("todo", id);
+      try {
+        await agents.dispatch(id, { title: slug.replace(/-/g, " "), body: cardBody, project });
+      } catch (err) {
+        // undo the column move so the board reflects reality
+        await mkdir(dirname(src), { recursive: true });
+        await rename(dst, src).catch(() => {});
+        await pruneEmpty("doing", id);
+        return json(res, { error: err.message }, err.code ? 409 : 500);
+      }
+      return json(res, { ok: true });
+    }
+
+    // API: POST /api/sessions/:id/(stop|merge|discard|retry), GET /api/sessions/:id/log
+    if (AGENTS && path.match(/^\/api\/sessions\/[^/]+\/[a-z]+$/)) {
+      const [, , , rawId, action] = path.split("/");
+      const id = decodeURIComponent(rawId);
+      try {
+        if (action === "log" && req.method === "GET") return json(res, { log: await agents.log(id) });
+        if (req.method !== "POST") return json(res, { error: "method" }, 405);
+        if (action === "stop") { await agents.stop(id); return json(res, { ok: true }); }
+        if (action === "merge") {
+          await agents.merge(id);
+          const from = cardPath("doing", id);
+          if (existsSync(from)) {
+            const dst = cardPath("done", id);
+            await mkdir(dirname(dst), { recursive: true });
+            await rename(from, dst);
+            await pruneEmpty("doing", id);
+          }
+          return json(res, { ok: true });
+        }
+        if (action === "discard") {
+          await agents.discard(id);
+          const from = cardPath("doing", id);
+          if (existsSync(from)) {
+            const dst = cardPath("todo", id);
+            await mkdir(dirname(dst), { recursive: true });
+            await rename(from, dst);
+            await pruneEmpty("doing", id);
+          }
+          return json(res, { ok: true });
+        }
+        if (action === "retry") {
+          const src = cardPath("doing", id);
+          if (!existsSync(src)) return json(res, { error: "card not in doing" }, 404);
+          const { project, slug } = splitId(id);
+          const { body: cardBody } = parseFrontmatter(await readFile(src));
+          await agents.dispatch(id, { title: slug.replace(/-/g, " "), body: cardBody, project });
+          return json(res, { ok: true });
+        }
+        return json(res, { error: "unknown action" }, 404);
+      } catch (err) {
+        return json(res, { error: err.message }, ["limit", "exists", "state", "conflict"].includes(err.code) ? 409 : 500);
+      }
     }
 
     // Serve UI
