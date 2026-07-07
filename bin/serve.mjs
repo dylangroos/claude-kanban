@@ -58,25 +58,42 @@ function toFrontmatter(meta, body) {
   return `---\n${yaml}\n---\n${body}\n`;
 }
 
-// Read board state
+// Read board state (column root + one level of project subdirs)
 async function getBoard() {
   const board = {};
+  const projects = new Set();
   for (const col of COLUMNS) {
     const dir = join(BOARD, col);
-    const files = (await readdir(dir)).filter((f) => f.endsWith(".md"));
     board[col] = [];
-    for (const f of files) {
-      const raw = await readFile(join(dir, f));
-      const { meta, body } = parseFrontmatter(raw);
-      board[col].push({
-        id: f.replace(/\.md$/, ""),
-        file: f,
-        body,
-        priority: meta.priority || meta.p || null,
-      });
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.isFile() && e.name.endsWith(".md")) {
+        board[col].push(await readCard(join(dir, e.name), e.name, null));
+      } else if (e.isDirectory() && !e.name.startsWith(".")) {
+        projects.add(e.name);
+        const files = (await readdir(join(dir, e.name))).filter((f) => f.endsWith(".md"));
+        for (const f of files) {
+          board[col].push(await readCard(join(dir, e.name, f), f, e.name));
+        }
+      }
     }
   }
+  board.projects = [...projects].sort();
   return board;
+}
+
+async function readCard(path, file, project) {
+  const raw = await readFile(path);
+  const { meta, body } = parseFrontmatter(raw);
+  const slug = file.replace(/\.md$/, "");
+  return {
+    id: project ? `${project}/${slug}` : slug,
+    slug,
+    file,
+    project,
+    body,
+    priority: meta.priority || meta.p || null,
+  };
 }
 
 // Simple slug
