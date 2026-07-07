@@ -36,19 +36,20 @@ todo ──▶ Work ──> doing[running] ──> doing[review] ──Merge─�
 
 ## The worker contract
 
-Spawn per card (Node `child_process.spawn`, zero new dependencies):
+Spawn per card (Node `child_process.spawn`, zero new dependencies), with `cwd` set to a **server-created worktree** — `git worktree add -b kanban/<flat-id> <os-tmpdir>/dot-kanban-agents/<repo>/<flat-id>` — rather than `claude --worktree` (deterministic branch names, version-independent, and testable with a fake-claude shim that can't create worktrees itself):
 
 ```
 claude -p "<card title>\n\n<card body>" \
-  --worktree kanban-<card-id> \
-  --output-format stream-json --include-partial-messages \
+  --output-format stream-json \
   --permission-mode acceptEdits \
   --allowedTools "Bash(git *),Bash(npm test*),Bash(npm run *),Bash(node *)" \
   --append-system-prompt "<dispatch briefing>"
 ```
 
+Log granularity is whole assistant messages plus tool-call names (no `--include-partial-messages` — partial deltas would duplicate message text in the log for no real liveness gain).
+
 - **Dispatch briefing** (injected system prompt): tells the session it was dispatched from the kanban board; which card, project, and board it serves; that it runs in an isolated git worktree on its own branch while the user's checkout stays untouched; to commit as it goes and never push; that a denied permission aborts the run; and that its final message becomes the card's review summary shown to the user.
-- **Isolation:** `--worktree` gives each session its own checkout and branch; concurrent workers cannot collide with each other or with the user's tree. Worktree names are the card id with `/` flattened to `--` (`kanban-api--fix-login-bug`); the metadata file records the actual branch name the worktree gets (the implementation plan pins down `--worktree` branch-naming behavior empirically). Metadata filenames flatten the same way.
+- **Isolation:** each session gets its own server-managed worktree and branch; concurrent workers cannot collide with each other or with the user's tree. The flat id is the card id with `/` flattened to `--` (`api--fix-login-bug`); branch = `kanban/<flat-id>`, worktree = `<os-tmpdir>/dot-kanban-agents/<repo>/<flat-id>`, metadata filename = `<flat-id>.json`. The dispatch records the base commit (`HEAD` at spawn) for diffstat and no-changes detection.
 - **Allowlist:** default covers file edits (acceptEdits) plus git/test/run commands; overridable via `KANBAN_AGENT_TOOLS` (passed through as the `--allowedTools` value). A tool call outside the list makes the run abort fast (headless behavior) → card shows **failed** with the denial reason; the user can Retry or take over via resume. Accepted trade-off: some cards won't complete unattended.
 - **Concurrency cap:** default 3 simultaneous workers (`KANBAN_MAX_AGENTS`); dispatch beyond the cap is rejected with a clear error toast (no queue — YAGNI).
 - **Stream parsing:** the server reduces stream-json events to a compact human log (assistant text deltas + tool-call one-liners). The terminal `result` event supplies `session_id`, `total_cost_usd`, and the result text (used as the review summary).
@@ -78,7 +79,7 @@ claude -p "<card title>\n\n<card body>" \
 
 - Server restart while workers run: children die with the server; cards surface as interrupted with resume hints (no zombie processes by design).
 - Dispatching a card that already has a session file: rejected unless status is failed/interrupted (Retry path).
-- Card renamed/moved manually while a session runs: the session finishes against its worktree; merge still works (branch is independent of the card file); the metadata file is keyed by the original id and surfaces as an orphan warning in the panel.
+- Card renamed/moved manually while a session runs: the session finishes against its worktree; merge still works via the API (branch is independent of the card file). The metadata stays keyed by the original id — the UI simply stops showing a chip for it (no card carries that id anymore); it remains visible in `.kanban/.agents/` and manageable via the session endpoints or plain `git worktree remove` + `git branch -D`. Accepted as-is: renaming a card mid-session is an unusual, deliberate act.
 - Worker makes no commits: review state shows "no changes"; only Discard is offered.
 - `claude` binary missing or too old for a flag: dispatch fails fast with the stderr line in the card's error.
 - The board's own repo (`.kanban` committed): worktrees live under `.claude/worktrees/`, branches under `kanban-*` — both invisible to the board.
