@@ -100,9 +100,9 @@ Claude assigns projects automatically when it creates cards (it reuses existing 
 
 Enable with `npx dot-kanban --agents` (or `KANBAN_AGENTS=1`). A ▶ button appears on each card in the web UI — click it to dispatch that card to a Claude Code session.
 
-Each dispatch runs in an isolated git worktree on its own branch (`kanban/<card-id>`), so your checkout is untouched while the agent works. Watch it live in the session panel, then when it finishes:
+Each dispatch runs in an isolated git worktree on its own branch — `kanban/<card-id>`, with `/` in the id replaced by `--` (e.g. `kanban/api--do-thing`) — so your checkout is untouched while the agent works. Watch it live in the session panel, then when it finishes:
 - **Review** the diff and summary on the card
-- **Merge** to fast-forward the changes into your branch and clean up the worktree, or
+- **Merge** to merge the branch into your checkout (a merge commit, `--no-ff`) and clean up the worktree, or
 - **Discard** to drop the branch and return the card to todo
 
 Env knobs:
