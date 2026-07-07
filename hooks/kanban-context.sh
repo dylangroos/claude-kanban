@@ -6,10 +6,12 @@ if [ -d ".kanban" ]; then
   todo_count=$(find .kanban/todo -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
   doing_count=$(find .kanban/doing -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
   done_count=$(find .kanban/done -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+  projects=$(find .kanban -mindepth 2 -maxdepth 2 -type d 2>/dev/null | awk -F/ '{print $3}' | sort -u | paste -sd ', ' -)
 
   cat <<EOF
 <kanban-context>
 This project has a kanban board at .kanban/ (todo: $todo_count, doing: $doing_count, done: $done_count)
+$([ -n "$projects" ] && echo "Projects (subfolders grouping cards): $projects — put new cards in a matching project folder, e.g. .kanban/todo/<project>/<slug>.md")
 
 Commands:
 - /kanban - view board
