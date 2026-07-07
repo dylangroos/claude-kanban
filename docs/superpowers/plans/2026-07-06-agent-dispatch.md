@@ -17,7 +17,7 @@
 - Flag: `--agents` anywhere in argv, or `KANBAN_AGENTS=1`. Board-path positional arg must still work alongside flags.
 - Naming: flat id = card id with `/` → `--`. Branch `kanban/<flat-id>`. Worktree `<os.tmpdir()>/dot-kanban-agents/<repo-basename>/<flat-id>`. Metadata `.kanban/.agents/<flat-id>.json`.
 - Session statuses: `running`, `stopping` (transient), `review`, `failed`, `interrupted`. Cards move `todo→doing` on dispatch, `doing→done` on merge, `doing→todo` on discard; columns stay the source of truth.
-- Env knobs: `KANBAN_MAX_AGENTS` (default 3), `KANBAN_AGENT_TOOLS` (default `Bash(git *),Bash(npm test*),Bash(npm run *),Bash(node *)`), `KANBAN_CLAUDE_BIN` (default `claude`; e2e points it at the shim).
+- Env knobs: `KANBAN_MAX_AGENTS` (default 3), `KANBAN_AGENT_TOOLS` (default `Bash(git *),Bash(npm test*),Bash(npm run *)`), `KANBAN_CLAUDE_BIN` (default `claude`; e2e points it at the shim).
 - All session-derived text rendered in the UI passes through `esc()` (or `md()`, which escapes) — same convention as v1.2.0.
 - No test framework (deliberate). Verification = the committed shim + curl assertions with expected output, exactly as written in each task; plus a real-`claude` manual pass and browser pass in Task 6.
 - Metadata JSON shape (all tasks agree on this): `{ id, status, branch, worktree, base, startedAt, endedAt?, sessionId, cost, summary, error, commits?, diffstat? }`.
@@ -121,7 +121,7 @@ import { promisify } from "node:util";
 
 const exec = promisify(execFile);
 const MAX = parseInt(process.env.KANBAN_MAX_AGENTS || "3", 10);
-const TOOLS = process.env.KANBAN_AGENT_TOOLS || "Bash(git *),Bash(npm test*),Bash(npm run *),Bash(node *)";
+const TOOLS = process.env.KANBAN_AGENT_TOOLS || "Bash(git *),Bash(npm test*),Bash(npm run *)";
 const LOG_CAP = 2000;
 
 export function createAgentManager({ board, repoRoot }) {

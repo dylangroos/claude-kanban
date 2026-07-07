@@ -12,7 +12,7 @@ The board records work but doesn't perform it. The user wants board actions to l
 
 The entire feature is off by default. Enable with `npx dot-kanban --agents` (any argv position; board path argument still works) or `KANBAN_AGENTS=1`. When disabled: agent endpoints are not registered (404), the board payload carries `agents: false`, and the UI renders no agent controls — byte-for-byte today's behavior. `/kanban ui` docs mention the flag.
 
-Independent of the flag (applies always): the server binds `127.0.0.1` instead of all interfaces, and the wildcard CORS header is dropped. Endpoints that spawn processes and run merges must never be LAN-reachable; the plain board gets the same hardening for free.
+Independent of the flag (applies always): the server binds `127.0.0.1` instead of all interfaces, and the wildcard CORS header is dropped. **The request handler also rejects any request whose `Host` header is not `localhost`/`127.0.0.1` (+ the server port) and any request carrying a non-localhost `Origin`** — loopback binding alone does not stop a drive-by web page from issuing simple cross-site POSTs, and the agent routes turn that into code execution, so an Origin/Host guard is required, not optional. This also defeats DNS-rebinding. Endpoints that spawn processes and run merges must never be reachable cross-origin; the plain board gets the same hardening for free.
 
 ## Card lifecycle
 
@@ -31,7 +31,7 @@ todo ──▶ Work ──> doing[running] ──> doing[review] ──Merge─�
 ## Session state
 
 - **Live state** (process handle, buffered log) is in server memory.
-- **Durable state** is one JSON file per dispatched card: `.kanban/.agents/<card-id>.json` — `{ sessionId, branch, worktree, status, startedAt, endedAt, cost, summary, error }`. Dot-directories are already invisible to `getBoard()` and the context hook (shipped in v1.2.0), so this nests inside the existing structure without touching board semantics. README recommends adding `.kanban/.agents/` to `.gitignore`.
+- **Durable state** is one JSON file per dispatched card: `.kanban/.agents/<flat-id>.json` — `{ id, sessionId, branch, worktree, base, status, startedAt, endedAt, cost, summary, error, commits, diffstat }`. Dot-directories are already invisible to `getBoard()` and the context hook (shipped in v1.2.0), so this nests inside the existing structure without touching board semantics. README recommends adding `.kanban/.agents/` to `.gitignore`.
 - On server restart, a card in `doing/` with an agents file whose status was `running` but no live process is reported as **interrupted**, and the UI shows the exact take-over command: `claude --resume <sessionId>`.
 
 ## The worker contract
@@ -42,7 +42,7 @@ Spawn per card (Node `child_process.spawn`, zero new dependencies), with `cwd` s
 claude -p "<card title>\n\n<card body>" \
   --output-format stream-json --verbose \
   --permission-mode acceptEdits \
-  --allowedTools "Bash(git *),Bash(npm test*),Bash(npm run *),Bash(node *)" \
+  --allowedTools "Bash(git *),Bash(npm test*),Bash(npm run *)" \
   --append-system-prompt "<dispatch briefing>"
 ```
 
@@ -77,12 +77,12 @@ Log granularity is whole assistant messages plus tool-call names (no `--include-
 
 ## Edge cases
 
-- Server restart while workers run: children die with the server; cards surface as interrupted with resume hints (no zombie processes by design).
+- Graceful server shutdown (SIGINT/SIGTERM) kills live worker children via an `agents.shutdown()` handler, so `Ctrl-C` leaves no orphans. On a hard crash (`kill -9`), a child can outlive the server; on next start `init()` marks such sessions **interrupted** (the metadata's `running` status with no live process), and the UI offers the `claude --resume <sessionId>` take-over. The rendered worker summary allows only `http(s):`/relative links (no `javascript:` sink), since the summary is LLM-authored from untrusted card text.
 - Dispatching a card that already has a session file: rejected unless status is failed/interrupted (Retry path).
 - Card renamed/moved manually while a session runs: the session finishes against its worktree; merge still works via the API (branch is independent of the card file). The metadata stays keyed by the original id — the UI simply stops showing a chip for it (no card carries that id anymore); it remains visible in `.kanban/.agents/` and manageable via the session endpoints or plain `git worktree remove` + `git branch -D`. Accepted as-is: renaming a card mid-session is an unusual, deliberate act.
 - Worker makes no commits: review state shows "no changes"; only Discard is offered.
 - `claude` binary missing or too old for a flag: dispatch fails fast with the stderr line in the card's error.
-- The board's own repo (`.kanban` committed): worktrees live under `.claude/worktrees/`, branches under `kanban-*` — both invisible to the board.
+- The board's own repo (`.kanban` committed): worktrees live under the OS temp dir (`<os-tmpdir>/dot-kanban-agents/<repo>/<flat-id>`), outside the repo entirely; branches are `kanban/<flat-id>` — the board reader only globs `.kanban/`, so neither is ever surfaced as a card.
 
 ## Verification
 
