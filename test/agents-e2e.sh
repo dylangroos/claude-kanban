@@ -120,11 +120,11 @@ assert_eq "$(git -C "$REPO" branch --list 'kanban/api--pr-thing' | wc -l | tr -d
 assert_eq "$(node -e "console.log(require('fs').existsSync(require('path').join(require('os').tmpdir(),'dot-kanban-agents','fixture','api--pr-thing')))")" "false" "worktree cleaned up after pr"
 assert_eq "$(git -C "$ORIGIN" branch --list 'kanban/*' | wc -l | tr -d ' ')" "1" "origin received the pushed branch"
 
-# --- discard a pr-status session: rejected by current backend (not a discardable status) ---
-code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:$PORT/api/sessions/api%2Fpr-thing/discard)
-assert_eq "$code" "409" "discard on pr-status session rejected"
-[ -f "$REPO/.kanban/doing/api/pr-thing.md" ] || fail "pr card should still be in doing after rejected discard"
-assert_eq "$(git -C "$REPO" branch --list 'kanban/api--pr-thing' | wc -l | tr -d ' ')" "1" "pr branch untouched by rejected discard"
+# --- discard a pr-status session: branch + metadata gone, card returns to todo ---
+assert_eq "$(curl -s -X POST localhost:$PORT/api/sessions/api%2Fpr-thing/discard)" '{"ok":true}' "discard pr-status session"
+[ -f "$REPO/.kanban/todo/api/pr-thing.md" ] || fail "discarded pr card should return to todo"
+assert_eq "$(git -C "$REPO" branch --list 'kanban/api--pr-thing' | wc -l | tr -d ' ')" "0" "pr branch removed by discard"
+assert_eq "$(jget /api/board "'api/pr-thing' in (b.sessions||{})")" "false" "pr session metadata removed by discard"
 
 # --- PR with no origin remote ---
 git -C "$REPO" remote remove origin

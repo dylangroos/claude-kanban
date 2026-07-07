@@ -209,7 +209,7 @@ export function createAgentManager({ board, repoRoot }) {
 
   async function discard(id) {
     const meta = await readMeta(id);
-    if (!meta || !["review", "failed", "interrupted"].includes(meta.status)) {
+    if (!meta || !["review", "failed", "interrupted", "pr"].includes(meta.status)) {
       const e = new Error("nothing to discard"); e.code = "state"; throw e;
     }
     await cleanupArtifacts(id);
