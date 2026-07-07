@@ -124,6 +124,13 @@ async function pruneEmpty(col, id) {
   try { await rmdir(join(BOARD, col, project)); } catch {}
 }
 
+// Next collision-free slug in a directory: slug, slug-2, slug-3, ...
+function freeSlug(dir, slug) {
+  let s = slug, n = 2;
+  while (existsSync(join(dir, `${s}.md`))) s = `${slug}-${n++}`;
+  return s;
+}
+
 // Route helpers
 function json(res, data, status = 200) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -159,25 +166,27 @@ const server = createServer(async (req, res) => {
     if (path === "/api/cards" && req.method === "POST") {
       const data = await body(req);
       const col = data.column || "todo";
-      const slug = slugify(data.title || "untitled");
       const project = data.project ? slugify(data.project) : null;
       const dir = project ? join(BOARD, col, project) : join(BOARD, col);
       await mkdir(dir, { recursive: true });
+      const slug = freeSlug(dir, slugify(data.title || "untitled"));
       const meta = {};
       if (data.priority) meta.priority = data.priority;
       await writeFile(join(dir, `${slug}.md`), toFrontmatter(meta, data.body || data.title || ""));
       return json(res, { ok: true, id: project ? `${project}/${slug}` : slug }, 201);
     }
 
-    // API: PUT /api/cards/:id/move  { from, to }  (id may be "project/slug")
+    // API: PUT /api/cards/:id/move  { from, to }  (id may be "project/slug"; collisions auto-rename)
     if (path.match(/^\/api\/cards\/[^/]+\/move$/) && req.method === "PUT") {
       const id = decodeURIComponent(path.split("/")[3]);
       const data = await body(req);
-      const dst = cardPath(data.to, id);
-      await mkdir(dirname(dst), { recursive: true });
-      await rename(cardPath(data.from, id), dst);
+      const { project, slug } = splitId(id);
+      const dir = project ? join(BOARD, data.to, project) : join(BOARD, data.to);
+      await mkdir(dir, { recursive: true });
+      const s = freeSlug(dir, slug);
+      await rename(cardPath(data.from, id), join(dir, `${s}.md`));
       await pruneEmpty(data.from, id);
-      return json(res, { ok: true });
+      return json(res, { ok: true, id: project ? `${project}/${s}` : s });
     }
 
     // API: PUT /api/cards/:id  { body?, priority?, project? }
@@ -201,13 +210,16 @@ const server = createServer(async (req, res) => {
         const proj = data.project ? slugify(data.project) : null;
         newId = proj ? `${proj}/${slug}` : slug;
       }
-      const dst = cardPath(found, newId);
+      let dst = cardPath(found, newId);
       if (dst !== src) {
         await mkdir(dirname(dst), { recursive: true });
-        await unlink(src);
+        const { project: np, slug: ns } = splitId(newId);
+        const s = freeSlug(dirname(dst), ns);
+        newId = np ? `${np}/${s}` : s;
+        dst = cardPath(found, newId);
       }
       await writeFile(dst, toFrontmatter(meta, newBody));
-      if (dst !== src) await pruneEmpty(found, id);
+      if (dst !== src) { await unlink(src); await pruneEmpty(found, id); }
       return json(res, { ok: true, id: newId });
     }
 
