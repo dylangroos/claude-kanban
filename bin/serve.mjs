@@ -11,9 +11,12 @@ const COLUMNS = ["todo", "doing", "done"];
 const PORT = parseInt(process.env.PORT || "4040", 10);
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
+const args = process.argv.slice(2);
+const AGENTS = args.includes("--agents") || process.env.KANBAN_AGENTS === "1";
+
 // Resolve board: CLI arg > env var > walk up from cwd to find .kanban/
 function findBoard() {
-  const arg = process.argv[2];
+  const arg = args.find((a) => !a.startsWith("--"));
   if (arg) return resolve(arg, ".kanban");
   if (process.env.KANBAN_DIR) return resolve(process.env.KANBAN_DIR);
   let dir = process.cwd();
@@ -150,17 +153,12 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const path = url.pathname;
 
-  // CORS for local dev
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-
   try {
     // API: GET /api/board
     if (path === "/api/board" && req.method === "GET") {
       const b = await getBoard();
       b.project = PROJECT;
+      b.agents = AGENTS;
       return json(res, b);
     }
 
@@ -256,7 +254,7 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, "127.0.0.1", () => {
   const url = `http://localhost:${PORT}`;
   console.log(`\n  ${PROJECT} / .kanban → ${url}\n`);
   // Auto-open browser (best-effort, silent fail)
