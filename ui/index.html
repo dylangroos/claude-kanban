@@ -56,6 +56,21 @@ header .meta{margin-left:auto;font-size:12px;color:var(--muted)}
 .chip:hover{color:var(--text);border-color:#444c56}
 .chip.on{color:var(--text);border-color:var(--accent);background:rgba(88,166,255,.1)}
 .chip .cdot{width:7px;height:7px;border-radius:50%}
+.ast{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.3px}
+.a-running,.a-stopping{background:rgba(88,166,255,.15);color:var(--accent);animation:pulse 2s infinite}
+.a-review{background:rgba(63,185,80,.15);color:var(--green)}
+.a-failed,.a-interrupted{background:rgba(248,81,73,.15);color:var(--red)}
+.sess{border-bottom:1px solid var(--border);padding:12px 20px;display:none;flex-shrink:0}
+.sess .srow{display:flex;align-items:center;gap:10px}
+.sess .scost{font-size:11px;color:var(--muted)}
+.sess code{font-size:11px;background:var(--card);padding:1px 6px;border-radius:4px}
+.sbtn{padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:none;color:var(--text);font-size:11px;cursor:pointer}
+.sbtn:hover{border-color:#444c56;background:var(--card)}
+.sbtn.ok{background:var(--green);border-color:var(--green);color:#fff}
+.sbtn.bad{color:var(--red);border-color:rgba(248,81,73,.4)}
+.slog{margin-top:10px;max-height:200px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:'SF Mono',Consolas,monospace;font-size:11px;line-height:1.5;white-space:pre-wrap}
+.ssum{margin-top:10px;font-size:13px}.ssum pre{margin-top:8px;font-size:11px;color:var(--muted);overflow-x:auto}
+.serr{margin-top:10px;font-size:12px;color:var(--red)}
 .card .acts{position:absolute;top:6px;right:6px;display:none;gap:2px}
 .card:hover .acts{display:flex}
 .card .acts button{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 5px;border-radius:3px;font-size:12px}
@@ -149,6 +164,7 @@ header .meta{margin-left:auto;font-size:12px;color:var(--muted)}
       <span class="tag" id="p-tag"></span>
       <button class="ed" id="p-ed" onclick="togEdit()">Edit</button>
     </div>
+    <div class="sess" id="p-sess"></div>
     <div class="panel-body" id="p-body">
       <div class="md" id="p-md"></div>
       <textarea id="p-ta"></textarea>
@@ -207,6 +223,7 @@ function render(){
   if(B.project)$('project').textContent=B.project;
   $('proj-dl').innerHTML=(B.projects||[]).map(p=>`<option value="${esc(p)}">`).join('');
   bindDrag();
+  if(cur)renderSess();
 }
 
 function card(c,col){
@@ -217,7 +234,10 @@ function card(c,col){
   const body=c.body?'<div class="b">'+md(c.body)+'</div>':'';
   const L=col!=='todo'?`<button onclick="ev(event);mv('${c.id}','${col}','${cols[cols.indexOf(col)-1]}')">&larr;</button>`:'';
   const R=col!=='done'?`<button onclick="ev(event);mv('${c.id}','${col}','${cols[cols.indexOf(col)+1]}')">&rarr;</button>`:'';
-  return`<div class="card${sel}" draggable="true" data-id="${c.id}" data-col="${col}" onclick="open_('${c.id}','${col}')"><div class="acts">${L}${R}</div><div class="t">${esc(c.slug.replace(/-/g,' '))}</div>${body}${proj}${pri}</div>`;
+  const s=(B.sessions||{})[c.id];
+  const st=s?`<span class="ast a-${s.status}">${s.status}</span>`:'';
+  const W=(B.agents&&col==='todo'&&!s)?`<button title="Work this card with an agent" onclick="ev(event);work('${c.id}')">&#9654;</button>`:'';
+  return`<div class="card${sel}" draggable="true" data-id="${c.id}" data-col="${col}" onclick="open_('${c.id}','${col}')"><div class="acts">${W}${L}${R}</div><div class="t">${esc(c.slug.replace(/-/g,' '))}</div>${body}${proj}${pri}${st}</div>`;
 }
 function ev(e){e.stopPropagation()}
 
@@ -240,7 +260,7 @@ function md(s){
   }
   return h;
 }
-function il(s){return esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank">$1</a>')}
+function il(s){return esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,t,u)=>/^(https?:\/\/|\/|\.\/|#)/i.test(u)?`<a href="${u}" target="_blank">${t}</a>`:t)}
 
 // drag
 function bindDrag(){
@@ -265,6 +285,50 @@ async function mv(id,from,to){
   prev='';load();
 }
 
+async function work(id){
+  const r=await fetch(`/api/cards/${encodeURIComponent(id)}/work`,{method:'POST'});
+  const j=await r.json().catch(()=>({}));
+  notify(r.ok?'Agent dispatched':'Dispatch failed: '+(j.error||r.status));
+  prev='';load();
+}
+async function sact(a){
+  if(!cur)return;
+  if(a==='discard'&&!confirm('Discard this agent\'s work? The branch will be deleted.'))return;
+  const r=await fetch(`/api/sessions/${encodeURIComponent(cur)}/${a}`,{method:'POST'});
+  const j=await r.json().catch(()=>({}));
+  notify(r.ok?a+' ok':a+' failed: '+(j.error||r.status));
+  prev='';load();
+}
+let logT=null;
+function renderSess(){
+  const el=$('p-sess');clearInterval(logT);logT=null;
+  const s=cur?(B.sessions||{})[cur]:null;
+  if(!s){el.style.display='none';el.innerHTML='';return}
+  el.style.display='block';
+  const cost=s.cost!=null?`<span class="scost">$${s.cost.toFixed(4)}</span>`:'';
+  let h=`<div class="srow"><span class="ast a-${s.status}">${s.status}</span>${cost}<code>${esc(s.branch||'')}</code><div class="sp"></div>`;
+  if(s.status==='running')h+=`<button class="sbtn bad" onclick="sact('stop')">Stop</button>`;
+  if(s.status==='review'){if(s.commits)h+=`<button class="sbtn ok" onclick="sact('merge')">Merge</button>`;h+=`<button class="sbtn bad" onclick="sact('discard')">Discard</button>`}
+  if(s.status==='failed'||s.status==='interrupted')h+=`<button class="sbtn" onclick="sact('retry')">Retry</button><button class="sbtn bad" onclick="sact('discard')">Discard</button>`;
+  h+='</div>';
+  if(s.status==='review')h+=`<div class="ssum">${md(s.summary||'')}${s.commits?`<pre>${esc(s.diffstat||'')}</pre>`:'<em>no changes were committed</em>'}</div>`;
+  if(s.status==='failed'&&s.error)h+=`<div class="serr">${esc(s.error)}</div>`;
+  if(s.status==='interrupted')h+=`<div class="serr">Server restarted mid-session. Take over: <code>claude --resume ${esc(s.sessionId||'?')}</code></div>`;
+  if(s.status==='running'||s.status==='stopping')h+=`<pre class="slog" id="slog"></pre>`;
+  el.innerHTML=h;
+  if(s.status==='running'||s.status==='stopping'){
+    const sid=cur;
+    const poll=async()=>{
+      if(cur!==sid)return;
+      const r=await fetch(`/api/sessions/${encodeURIComponent(sid)}/log`);
+      const j=await r.json().catch(()=>({log:''}));
+      if(cur!==sid)return;
+      const p=$('slog');if(p){p.textContent=j.log||'';p.scrollTop=p.scrollHeight}
+    };
+    poll();logT=setInterval(poll,2000);
+  }
+}
+
 // panel
 function open_(id,col){
   if(cur===id){close_();return}
@@ -281,6 +345,7 @@ function open_(id,col){
   $('p-sav').style.display='none';
   panelMeta();
   document.querySelectorAll('.card').forEach(x=>x.classList.toggle('sel',x.dataset.id===id));
+  renderSess();
 }
 function panelMeta(){
   const tag=$('p-tag');tag.textContent=curCol;tag.className='tag '+curCol;
@@ -293,6 +358,7 @@ function close_(){
   cur=null;curCol=null;editing=false;
   $('panel').classList.remove('open');
   document.querySelectorAll('.card.sel').forEach(x=>x.classList.remove('sel'));
+  clearInterval(logT);logT=null;
 }
 function togEdit(){
   editing=!editing;

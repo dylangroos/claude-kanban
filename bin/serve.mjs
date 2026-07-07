@@ -6,14 +6,18 @@ import { join, resolve, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { exec } from "node:child_process";
+import { createAgentManager } from "./agents.mjs";
 
 const COLUMNS = ["todo", "doing", "done"];
 const PORT = parseInt(process.env.PORT || "4040", 10);
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
+const args = process.argv.slice(2);
+const AGENTS = args.includes("--agents") || process.env.KANBAN_AGENTS === "1";
+
 // Resolve board: CLI arg > env var > walk up from cwd to find .kanban/
 function findBoard() {
-  const arg = process.argv[2];
+  const arg = args.find((a) => !a.startsWith("--"));
   if (arg) return resolve(arg, ".kanban");
   if (process.env.KANBAN_DIR) return resolve(process.env.KANBAN_DIR);
   let dir = process.cwd();
@@ -34,6 +38,15 @@ const PROJECT = basename(resolve(BOARD, ".."));
 for (const col of COLUMNS) {
   const dir = join(BOARD, col);
   if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+}
+
+const REPO_ROOT = resolve(BOARD, "..");
+const agents = AGENTS ? createAgentManager({ board: BOARD, repoRoot: REPO_ROOT }) : null;
+if (agents) await agents.init();
+if (agents) {
+  const bye = () => { agents.shutdown(); process.exit(0); };
+  process.on("SIGINT", bye);
+  process.on("SIGTERM", bye);
 }
 
 // Parse simple YAML frontmatter
@@ -147,20 +160,24 @@ async function body(req) {
 
 // Serve
 const server = createServer(async (req, res) => {
+  // Reject cross-origin and DNS-rebinding requests: this is a localhost-only tool,
+  // and the agent routes can execute code, so an attacker page must not reach us.
+  const host = req.headers.host || "";
+  const okHost = host === `localhost:${PORT}` || host === `127.0.0.1:${PORT}` || host === `[::1]:${PORT}`;
+  const origin = req.headers.origin;
+  const okOrigin = !origin || /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin);
+  if (!okHost || !okOrigin) { res.writeHead(403); res.end("forbidden"); return; }
+
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const path = url.pathname;
-
-  // CORS for local dev
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
 
   try {
     // API: GET /api/board
     if (path === "/api/board" && req.method === "GET") {
       const b = await getBoard();
       b.project = PROJECT;
+      b.agents = AGENTS;
+      if (agents) b.sessions = await agents.sessions();
       return json(res, b);
     }
 
@@ -241,6 +258,73 @@ const server = createServer(async (req, res) => {
       return json(res, { error: "not found" }, 404);
     }
 
+    // API: POST /api/cards/:id/work — dispatch an agent on a todo card
+    if (AGENTS && path.match(/^\/api\/cards\/[^/]+\/work$/) && req.method === "POST") {
+      const id = decodeURIComponent(path.split("/")[3]);
+      const src = cardPath("todo", id);
+      if (!existsSync(src)) return json(res, { error: "card not in todo" }, 404);
+      const { project, slug } = splitId(id);
+      const { body: cardBody } = parseFrontmatter(await readFile(src));
+      const dst = cardPath("doing", id);
+      await mkdir(dirname(dst), { recursive: true });
+      await rename(src, dst);
+      await pruneEmpty("todo", id);
+      try {
+        await agents.dispatch(id, { title: slug.replace(/-/g, " "), body: cardBody, project });
+      } catch (err) {
+        // undo the column move so the board reflects reality
+        await mkdir(dirname(src), { recursive: true });
+        await rename(dst, src).catch(() => {});
+        await pruneEmpty("doing", id);
+        return json(res, { error: err.message }, ["limit", "exists"].includes(err.code) ? 409 : 500);
+      }
+      return json(res, { ok: true });
+    }
+
+    // API: POST /api/sessions/:id/(stop|merge|discard|retry), GET /api/sessions/:id/log
+    if (AGENTS && path.match(/^\/api\/sessions\/[^/]+\/[a-z]+$/)) {
+      const [, , , rawId, action] = path.split("/");
+      const id = decodeURIComponent(rawId);
+      try {
+        if (action === "log" && req.method === "GET") return json(res, { log: await agents.log(id) });
+        if (req.method !== "POST") return json(res, { error: "method" }, 405);
+        if (action === "stop") { await agents.stop(id); return json(res, { ok: true }); }
+        if (action === "merge") {
+          await agents.merge(id);
+          const from = cardPath("doing", id);
+          if (existsSync(from)) {
+            const dst = cardPath("done", id);
+            await mkdir(dirname(dst), { recursive: true });
+            await rename(from, dst);
+            await pruneEmpty("doing", id);
+          }
+          return json(res, { ok: true });
+        }
+        if (action === "discard") {
+          await agents.discard(id);
+          const from = cardPath("doing", id);
+          if (existsSync(from)) {
+            const dst = cardPath("todo", id);
+            await mkdir(dirname(dst), { recursive: true });
+            await rename(from, dst);
+            await pruneEmpty("doing", id);
+          }
+          return json(res, { ok: true });
+        }
+        if (action === "retry") {
+          const src = cardPath("doing", id);
+          if (!existsSync(src)) return json(res, { error: "card not in doing" }, 404);
+          const { project, slug } = splitId(id);
+          const { body: cardBody } = parseFrontmatter(await readFile(src));
+          await agents.dispatch(id, { title: slug.replace(/-/g, " "), body: cardBody, project });
+          return json(res, { ok: true });
+        }
+        return json(res, { error: "unknown action" }, 404);
+      } catch (err) {
+        return json(res, { error: err.message }, ["limit", "exists", "state", "conflict"].includes(err.code) ? 409 : 500);
+      }
+    }
+
     // Serve UI
     if (path === "/" || path === "/index.html") {
       const html = await readFile(join(__dirname, "..", "ui", "index.html"));
@@ -256,7 +340,7 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, "127.0.0.1", () => {
   const url = `http://localhost:${PORT}`;
   console.log(`\n  ${PROJECT} / .kanban → ${url}\n`);
   // Auto-open browser (best-effort, silent fail)

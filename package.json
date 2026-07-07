@@ -5,6 +5,9 @@
   "bin": {
     "dot-kanban": "./bin/serve.mjs"
   },
+  "scripts": {
+    "test:agents": "bash test/agents-e2e.sh"
+  },
   "type": "module",
   "license": "MIT",
   "author": "Dylan Groos",
