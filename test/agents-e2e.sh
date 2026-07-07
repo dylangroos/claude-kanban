@@ -18,12 +18,25 @@ git -C "$REPO" init -q
 git -C "$REPO" add -A
 git -C "$REPO" -c user.email=t@t -c user.name=t commit -qm init
 
+# Bare "origin" so a real `git push` (part of the PR flow) works fully offline.
+ORIGIN="$(mktemp -d)/origin.git"
+git init --bare -q "$ORIGIN"
+git -C "$REPO" remote add origin "$ORIGIN"
+
 start() { # start [extra env...] -- [server args...]
-  env "$@" NO_OPEN=1 PORT=$PORT KANBAN_CLAUDE_BIN="$ROOT/test/fake-claude" \
+  env "$@" NO_OPEN=1 PORT=$PORT KANBAN_CLAUDE_BIN="$ROOT/test/fake-claude" KANBAN_GH_BIN="$ROOT/test/fake-gh" \
     node "$ROOT/bin/serve.mjs" "$REPO" ${AGENTS_FLAG:-} & PID=$!; sleep 1
 }
 stop_srv() { kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true; PID=""; }
 jget() { curl -s "localhost:$PORT$1" | node -e "const b=JSON.parse(require('fs').readFileSync(0));console.log(eval(process.argv[1]))" "$2"; }
+# jexpr JSON_STRING EXPR — same as jget but evals against an already-captured JSON body.
+jexpr() { node -e "const b=JSON.parse(process.argv[1]);console.log(eval(process.argv[2]))" "$1" "$2"; }
+# post_pr ID — POST /api/sessions/ID/pr, sets $pr_code and $pr_body.
+post_pr() {
+  local resp; resp="$(curl -s -w '\n%{http_code}' -X POST "localhost:$PORT/api/sessions/$1/pr")"
+  pr_code="$(printf '%s' "$resp" | tail -n1)"
+  pr_body="$(printf '%s' "$resp" | sed '$d')"
+}
 
 # --- happy path -------------------------------------------------------------
 AGENTS_FLAG=--agents start
@@ -84,6 +97,59 @@ assert_eq "$(curl -s -X POST localhost:$PORT/api/sessions/api%2Flong-card/stop)"
 sleep 1
 assert_eq "$(jget /api/board "b.sessions['api/long-card'].status")" "failed" "stopped → failed"
 curl -s -X POST localhost:$PORT/api/sessions/api%2Flong-card/discard >/dev/null
+stop_srv
+
+# --- diff viewer + PR happy path ---
+AGENTS_FLAG=--agents start
+printf "PR card\n" > "$REPO/.kanban/todo/api/pr-thing.md"
+assert_eq "$(curl -s -X POST localhost:$PORT/api/cards/api%2Fpr-thing/work)" '{"ok":true}' "dispatch(pr-thing)"
+sleep 2
+assert_eq "$(jget /api/board "b.sessions['api/pr-thing'].status")" "review" "pr-thing in review"
+
+assert_eq "$(jget /api/sessions/api%2Fpr-thing/diff "b.diff.includes('fake-work.txt')")" "true" "diff includes fake-work.txt"
+assert_eq "$(jget /api/sessions/api%2Fpr-thing/diff "b.diff.split('\n').some(l=>l.startsWith('+done:'))")" "true" "diff has +done: content line"
+assert_eq "$(jget /api/sessions/api%2Fpr-thing/diff "b.truncated")" "false" "diff not truncated"
+
+post_pr api%2Fpr-thing
+assert_eq "$pr_code" "200" "pr create → 200"
+assert_eq "$(jexpr "$pr_body" "!!b.url")" "true" "pr response has a url"
+assert_eq "$(jget /api/board "b.sessions['api/pr-thing'].status")" "pr" "session status pr after PR"
+assert_eq "$(jget /api/board "!!b.sessions['api/pr-thing'].prUrl")" "true" "prUrl set on session"
+[ -f "$REPO/.kanban/doing/api/pr-thing.md" ] || fail "pr card should stay in doing, not move"
+assert_eq "$(git -C "$REPO" branch --list 'kanban/api--pr-thing' | wc -l | tr -d ' ')" "1" "local pr branch preserved"
+assert_eq "$(node -e "console.log(require('fs').existsSync(require('path').join(require('os').tmpdir(),'dot-kanban-agents','fixture','api--pr-thing')))")" "false" "worktree cleaned up after pr"
+assert_eq "$(git -C "$ORIGIN" branch --list 'kanban/*' | wc -l | tr -d ' ')" "1" "origin received the pushed branch"
+
+# --- discard a pr-status session: rejected by current backend (not a discardable status) ---
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:$PORT/api/sessions/api%2Fpr-thing/discard)
+assert_eq "$code" "409" "discard on pr-status session rejected"
+[ -f "$REPO/.kanban/doing/api/pr-thing.md" ] || fail "pr card should still be in doing after rejected discard"
+assert_eq "$(git -C "$REPO" branch --list 'kanban/api--pr-thing' | wc -l | tr -d ' ')" "1" "pr branch untouched by rejected discard"
+
+# --- PR with no origin remote ---
+git -C "$REPO" remote remove origin
+printf "no origin card\n" > "$REPO/.kanban/todo/api/pr-noorigin.md"
+assert_eq "$(curl -s -X POST localhost:$PORT/api/cards/api%2Fpr-noorigin/work)" '{"ok":true}' "dispatch(pr-noorigin)"
+sleep 2
+assert_eq "$(jget /api/board "b.sessions['api/pr-noorigin'].status")" "review" "pr-noorigin in review"
+post_pr api%2Fpr-noorigin
+assert_eq "$pr_code" "409" "pr with no origin → 409"
+assert_eq "$(jexpr "$pr_body" "/origin/i.test(b.error)")" "true" "no-origin error mentions origin"
+git -C "$REPO" remote add origin "$ORIGIN"
+stop_srv
+
+# --- PR when gh CLI fails (e.g. unauthenticated) ---
+AGENTS_FLAG=--agents start FAKE_GH_FAIL=1
+printf "gh fail card\n" > "$REPO/.kanban/todo/api/pr-ghfail.md"
+assert_eq "$(curl -s -X POST localhost:$PORT/api/cards/api%2Fpr-ghfail/work)" '{"ok":true}' "dispatch(pr-ghfail)"
+sleep 2
+assert_eq "$(jget /api/board "b.sessions['api/pr-ghfail'].status")" "review" "pr-ghfail in review"
+post_pr api%2Fpr-ghfail
+assert_eq "$pr_code" "409" "pr with gh failure → 409"
+assert_eq "$(jexpr "$pr_body" "/not authenticated/.test(b.error)")" "true" "gh failure stderr surfaced in error"
+assert_eq "$(jget /api/board "b.sessions['api/pr-ghfail'].status")" "review" "status stays review after gh failure (retryable)"
+[ -f "$REPO/.kanban/doing/api/pr-ghfail.md" ] || fail "pr-ghfail card should still be in doing"
+curl -s -X POST localhost:$PORT/api/sessions/api%2Fpr-ghfail/discard >/dev/null
 stop_srv
 
 echo PASS

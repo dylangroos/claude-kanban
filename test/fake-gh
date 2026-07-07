@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Fake gh CLI for deterministic e2e tests. Mimics: gh pr create --head <branch> --base <base> --title <title> --body <body>
+set -euo pipefail
+
+if [ "${1:-}" = "pr" ] && [ "${2:-}" = "create" ]; then
+  if [ "${FAKE_GH_FAIL:-}" = "1" ]; then
+    echo "fake-gh: not authenticated" >&2
+    exit 1
+  fi
+  echo "https://github.com/fake/repo/pull/1"
+  exit 0
+fi
+
+echo "fake-gh: unsupported invocation: $*" >&2
+exit 1
