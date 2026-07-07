@@ -186,7 +186,8 @@ export function createAgentManager({ board, repoRoot }) {
   }
 
   async function dispatch(id, card) {
-    const running = [...live.values()].filter((e) => e.child.exitCode === null).length;
+    // count by explicit done flag: signal-killed children keep exitCode === null
+    const running = [...live.values()].filter((e) => !e.done).length;
     if (running >= MAX) { const e = new Error(`agent limit (${MAX}) reached`); e.code = "limit"; throw e; }
     const prior = await readMeta(id);
     if (prior && !["failed", "interrupted"].includes(prior.status)) {
@@ -219,7 +220,7 @@ export function createAgentManager({ board, repoRoot }) {
       "--allowedTools", TOOLS,
       "--append-system-prompt", briefing,
     ], { cwd: wt, stdio: ["ignore", "pipe", "pipe"] });
-    const entry = { child, log: [], meta };
+    const entry = { child, log: [], meta, done: false };
     live.set(flat(id), entry);
     let buf = "", errBuf = "";
     child.stdout.on("data", (d) => {
@@ -233,13 +234,18 @@ export function createAgentManager({ board, repoRoot }) {
     });
     child.stderr.on("data", (d) => { errBuf = (errBuf + d).slice(-2000); });
     child.on("error", async (err) => {
+      entry.done = true;
       meta.status = "failed"; meta.error = `could not start ${bin}: ${err.message}`;
       meta.endedAt = new Date().toISOString();
       await writeMeta(meta);
     });
     child.on("close", async (code) => {
+      entry.done = true;
+      const rest = buf.trim();
+      if (rest) { try { handleEvent(entry, JSON.parse(rest)); } catch { pushLog(entry, rest); } buf = ""; }
       meta.endedAt = new Date().toISOString();
       if (meta.status === "stopping") { meta.status = "failed"; meta.error = "stopped by user"; }
+      else if (meta.status === "failed") { /* spawn error already recorded by the error handler */ }
       else if (code === 0) {
         const n = parseInt(await git(["rev-list", "--count", `${meta.base}..${meta.branch}`]).catch(() => "0"), 10);
         meta.commits = n;
@@ -256,7 +262,7 @@ export function createAgentManager({ board, repoRoot }) {
 
   async function stop(id) {
     const entry = live.get(flat(id));
-    if (!entry || entry.child.exitCode !== null) { const e = new Error("not running"); e.code = "state"; throw e; }
+    if (!entry || entry.done || entry.meta.status !== "running") { const e = new Error("not running"); e.code = "state"; throw e; }
     entry.meta.status = "stopping";
     await writeMeta(entry.meta);
     entry.child.kill("SIGTERM");
@@ -327,6 +333,7 @@ import { writeFileSync } from "node:fs";
 
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 const prompt = process.argv[process.argv.indexOf("-p") + 1] || "";
+const sleepS = parseFloat(process.env.FAKE_CLAUDE_SLEEP || "0");
 
 out({ type: "system", subtype: "init", session_id: "fake-session-123" });
 out({ type: "assistant", message: { content: [{ type: "text", text: `Working on: ${prompt.split("\n")[0]}` }] } });
@@ -336,11 +343,15 @@ if (process.env.FAKE_CLAUDE_FAIL === "1") {
   process.exit(2);
 }
 
+if (sleepS) await new Promise((r) => setTimeout(r, sleepS * 1000));
+
 out({ type: "assistant", message: { content: [{ type: "tool_use", name: "Edit", id: "t1", input: {} }] } });
 writeFileSync("fake-work.txt", `done: ${prompt.split("\n")[0]}\n`);
 execFileSync("git", ["add", "fake-work.txt"]);
 execFileSync("git", ["commit", "-m", "fake: complete card work"], { env: { ...process.env, GIT_AUTHOR_NAME: "fake", GIT_AUTHOR_EMAIL: "f@ke", GIT_COMMITTER_NAME: "fake", GIT_COMMITTER_EMAIL: "f@ke" } });
-out({ type: "result", subtype: "success", session_id: "fake-session-123", total_cost_usd: 0.0123, result: "Implemented the card: created fake-work.txt and committed it. Verified by inspection." });
+const result = { type: "result", subtype: "success", session_id: "fake-session-123", total_cost_usd: 0.0123, result: "Implemented the card: created fake-work.txt and committed it. Verified by inspection." };
+if (process.env.FAKE_CLAUDE_NO_NEWLINE === "1") process.stdout.write(JSON.stringify(result));
+else out(result);
 ```
 
 Then: `chmod +x test/fake-claude`.
