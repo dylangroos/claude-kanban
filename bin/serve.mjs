@@ -43,6 +43,11 @@ for (const col of COLUMNS) {
 const REPO_ROOT = resolve(BOARD, "..");
 const agents = AGENTS ? createAgentManager({ board: BOARD, repoRoot: REPO_ROOT }) : null;
 if (agents) await agents.init();
+if (agents) {
+  const bye = () => { agents.shutdown(); process.exit(0); };
+  process.on("SIGINT", bye);
+  process.on("SIGTERM", bye);
+}
 
 // Parse simple YAML frontmatter
 function parseFrontmatter(raw) {
@@ -155,6 +160,14 @@ async function body(req) {
 
 // Serve
 const server = createServer(async (req, res) => {
+  // Reject cross-origin and DNS-rebinding requests: this is a localhost-only tool,
+  // and the agent routes can execute code, so an attacker page must not reach us.
+  const host = req.headers.host || "";
+  const okHost = host === `localhost:${PORT}` || host === `127.0.0.1:${PORT}` || host === `[::1]:${PORT}`;
+  const origin = req.headers.origin;
+  const okOrigin = !origin || /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin);
+  if (!okHost || !okOrigin) { res.writeHead(403); res.end("forbidden"); return; }
+
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const path = url.pathname;
 

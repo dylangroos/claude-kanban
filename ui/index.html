@@ -260,7 +260,7 @@ function md(s){
   }
   return h;
 }
-function il(s){return esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank">$1</a>')}
+function il(s){return esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,t,u)=>/^(https?:\/\/|\/|\.\/|#)/i.test(u)?`<a href="${u}" target="_blank">${t}</a>`:t)}
 
 // drag
 function bindDrag(){

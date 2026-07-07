@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 
 const exec = promisify(execFile);
 const MAX = parseInt(process.env.KANBAN_MAX_AGENTS || "3", 10);
-const TOOLS = process.env.KANBAN_AGENT_TOOLS || "Bash(git *),Bash(npm test*),Bash(npm run *),Bash(node *)";
+const TOOLS = process.env.KANBAN_AGENT_TOOLS || "Bash(git *),Bash(npm test*),Bash(npm run *)";
 const LOG_CAP = 2000;
 
 export function createAgentManager({ board, repoRoot }) {
@@ -159,9 +159,10 @@ export function createAgentManager({ board, repoRoot }) {
     if (!meta.commits) { const e = new Error("no changes to merge"); e.code = "state"; throw e; }
     try {
       await git(["merge", "--no-ff", "--no-edit", meta.branch]);
-    } catch {
+    } catch (mergeErr) {
       await git(["merge", "--abort"]).catch(() => {});
-      const e = new Error(`merge conflicts - resolve manually; branch preserved: ${meta.branch}`);
+      const detail = (mergeErr.stderr || mergeErr.stdout || "").toString().trim().split("\n").pop() || "merge failed";
+      const e = new Error(`${detail}; branch preserved: ${meta.branch}`);
       e.code = "conflict"; throw e;
     }
     await cleanupArtifacts(id);
@@ -202,5 +203,11 @@ export function createAgentManager({ board, repoRoot }) {
     return out;
   }
 
-  return { init, dispatch, stop, merge, discard, log, sessions };
+  function shutdown() {
+    for (const entry of live.values()) {
+      if (!entry.done) { try { entry.child.kill("SIGKILL"); } catch {} }
+    }
+  }
+
+  return { init, dispatch, stop, merge, discard, log, sessions, shutdown };
 }

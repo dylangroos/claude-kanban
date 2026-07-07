@@ -55,4 +55,35 @@ assert_eq "$(jget /api/board "b.agents")" "false" "agents false"
 assert_eq "$(jget /api/board "'sessions' in b")" "false" "no sessions key"
 stop_srv
 
+# --- merge conflict aborts cleanly ---
+AGENTS_FLAG=--agents start
+printf "conflict card\n" > "$REPO/.kanban/todo/api/conflict-card.md"
+# dispatch first, so the worker's worktree branches from HEAD before the user's
+# conflicting commit exists — both sides then independently add fake-work.txt,
+# which is an add/add conflict on merge.
+assert_eq "$(curl -s -X POST localhost:$PORT/api/cards/api%2Fconflict-card/work)" '{"ok":true}' "dispatch(conflict)"
+printf "user version\n" > "$REPO/fake-work.txt"
+git -C "$REPO" add fake-work.txt && git -C "$REPO" -c user.email=t@t -c user.name=t commit -qm "user fake-work"
+sleep 2
+assert_eq "$(jget /api/board "b.sessions['api/conflict-card'].status")" "review" "conflict card in review"
+before_status="$(git -C "$REPO" status --porcelain --untracked-files=no)"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:$PORT/api/sessions/api%2Fconflict-card/merge)
+assert_eq "$code" "409" "merge conflict → 409"
+assert_eq "$(git -C "$REPO" status --porcelain --untracked-files=no)" "$before_status" "checkout unchanged after aborted merge"
+assert_eq "$(git -C "$REPO" branch --list 'kanban/api--conflict-card' | wc -l | tr -d ' ')" "1" "conflict branch preserved"
+curl -s -X POST localhost:$PORT/api/sessions/api%2Fconflict-card/discard >/dev/null
+stop_srv
+
+# --- stop a running session ---
+AGENTS_FLAG=--agents start FAKE_CLAUDE_SLEEP=30
+printf "long card\n" > "$REPO/.kanban/todo/api/long-card.md"
+curl -s -X POST localhost:$PORT/api/cards/api%2Flong-card/work >/dev/null
+sleep 1
+assert_eq "$(jget /api/board "b.sessions['api/long-card'].status")" "running" "long card running"
+assert_eq "$(curl -s -X POST localhost:$PORT/api/sessions/api%2Flong-card/stop)" '{"ok":true}' "stop"
+sleep 1
+assert_eq "$(jget /api/board "b.sessions['api/long-card'].status")" "failed" "stopped → failed"
+curl -s -X POST localhost:$PORT/api/sessions/api%2Flong-card/discard >/dev/null
+stop_srv
+
 echo PASS

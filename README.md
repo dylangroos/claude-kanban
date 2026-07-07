@@ -107,7 +107,8 @@ Each dispatch runs in an isolated git worktree on its own branch — `kanban/<ca
 
 Env knobs:
 - `KANBAN_MAX_AGENTS` - concurrent session cap (default 3)
-- `KANBAN_AGENT_TOOLS` - allowed tools passed to the agent (default `Bash(git *),Bash(npm test*),Bash(npm run *),Bash(node *)`)
+- `KANBAN_AGENT_TOOLS` - allowed tools passed to the agent (default `Bash(git *),Bash(npm test*),Bash(npm run *)`)
+  The allowlist is your real safety boundary — a dispatched worker can run anything it matches, so widen it deliberately.
 - `KANBAN_CLAUDE_BIN` - path to the `claude` binary (default `claude`)
 
 If the agent tries a command outside `KANBAN_AGENT_TOOLS`, the session fails fast rather than prompting — widen the allowlist and retry. Session metadata lives in `.kanban/.agents/`; add it to `.gitignore`. The server only binds `127.0.0.1`, agents mode included.
