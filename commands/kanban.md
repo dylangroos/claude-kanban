@@ -19,6 +19,12 @@ node $CLAUDE_PLUGIN_ROOT/bin/serve.mjs
 ```
 This starts a local server at http://localhost:4040 (or $PORT) that auto-opens the browser. Tell the user the board is live and they can manage cards visually. The server runs in the background — changes sync both ways with the .kanban/ folder every 3 seconds.
 
+If the user asks for agents (dispatching cards to Claude Code sessions from the board), add the `--agents` flag:
+```
+node $CLAUDE_PLUGIN_ROOT/bin/serve.mjs --agents
+```
+This adds a ▶ button per card that runs it in an isolated worktree; without the flag those routes are gated off.
+
 **work <feature description>**: Full automation pipeline:
 1. Use Task tool to invoke `task-planner` agent - break the feature into kanban cards under one project folder named after the feature
 2. For each card created in `.kanban/todo/<project>/`, spawn a subagent (using Task tool) to implement it

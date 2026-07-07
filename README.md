@@ -96,6 +96,24 @@ Claude assigns projects automatically when it creates cards (it reuses existing 
 
 ## Agents
 
+### Dispatch work to Claude
+
+Enable with `npx dot-kanban --agents` (or `KANBAN_AGENTS=1`). A ▶ button appears on each card in the web UI — click it to dispatch that card to a Claude Code session.
+
+Each dispatch runs in an isolated git worktree on its own branch (`kanban/<card-id>`), so your checkout is untouched while the agent works. Watch it live in the session panel, then when it finishes:
+- **Review** the diff and summary on the card
+- **Merge** to fast-forward the changes into your branch and clean up the worktree, or
+- **Discard** to drop the branch and return the card to todo
+
+Env knobs:
+- `KANBAN_MAX_AGENTS` - concurrent session cap (default 3)
+- `KANBAN_AGENT_TOOLS` - allowed tools passed to the agent (default `Bash(git *),Bash(npm test*),Bash(npm run *),Bash(node *)`)
+- `KANBAN_CLAUDE_BIN` - path to the `claude` binary (default `claude`)
+
+If the agent tries a command outside `KANBAN_AGENT_TOOLS`, the session fails fast rather than prompting — widen the allowlist and retry. Session metadata lives in `.kanban/.agents/`; add it to `.gitignore`. The server only binds `127.0.0.1`, agents mode included.
+
+### Claude Code agents
+
 **task-planner** - Break down big features into cards:
 - "plan out the authentication system"
 - "break this feature into tasks"
