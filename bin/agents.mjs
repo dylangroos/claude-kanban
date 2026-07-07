@@ -72,7 +72,7 @@ export function createAgentManager({ board, repoRoot }) {
   }
 
   async function dispatch(id, card) {
-    const running = [...live.values()].filter((e) => e.child.exitCode === null).length;
+    const running = [...live.values()].filter((e) => !e.done).length;
     if (running >= MAX) { const e = new Error(`agent limit (${MAX}) reached`); e.code = "limit"; throw e; }
     const prior = await readMeta(id);
     if (prior && !["failed", "interrupted"].includes(prior.status)) {
@@ -105,7 +105,7 @@ export function createAgentManager({ board, repoRoot }) {
       "--allowedTools", TOOLS,
       "--append-system-prompt", briefing,
     ], { cwd: wt, stdio: ["ignore", "pipe", "pipe"] });
-    const entry = { child, log: [], meta };
+    const entry = { child, log: [], meta, done: false };
     live.set(flat(id), entry);
     let buf = "", errBuf = "";
     child.stdout.on("data", (d) => {
@@ -119,13 +119,18 @@ export function createAgentManager({ board, repoRoot }) {
     });
     child.stderr.on("data", (d) => { errBuf = (errBuf + d).slice(-2000); });
     child.on("error", async (err) => {
+      entry.done = true;
       meta.status = "failed"; meta.error = `could not start ${bin}: ${err.message}`;
       meta.endedAt = new Date().toISOString();
       await writeMeta(meta);
     });
     child.on("close", async (code) => {
+      entry.done = true;
+      const rest = buf.trim();
+      if (rest) { try { handleEvent(entry, JSON.parse(rest)); } catch { pushLog(entry, rest); } buf = ""; }
       meta.endedAt = new Date().toISOString();
       if (meta.status === "stopping") { meta.status = "failed"; meta.error = "stopped by user"; }
+      else if (meta.status === "failed") { /* spawn error already recorded by the error handler */ }
       else if (code === 0) {
         const n = parseInt(await git(["rev-list", "--count", `${meta.base}..${meta.branch}`]).catch(() => "0"), 10);
         meta.commits = n;
@@ -142,7 +147,7 @@ export function createAgentManager({ board, repoRoot }) {
 
   async function stop(id) {
     const entry = live.get(flat(id));
-    if (!entry || entry.child.exitCode !== null) { const e = new Error("not running"); e.code = "state"; throw e; }
+    if (!entry || entry.done || entry.meta.status !== "running") { const e = new Error("not running"); e.code = "state"; throw e; }
     entry.meta.status = "stopping";
     await writeMeta(entry.meta);
     entry.child.kill("SIGTERM");
