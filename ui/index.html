@@ -156,6 +156,7 @@ header .meta{margin-left:auto;font-size:12px;color:var(--muted)}
     <div class="panel-foot">
       <div class="moves" id="p-mv"></div>
       <select id="p-pri" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text);font-size:11px;outline:none"><option value="">No priority</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+      <input id="p-proj" list="proj-dl" placeholder="No project" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text);font-size:11px;outline:none;width:110px">
       <div class="sp"></div>
       <button class="del" id="p-del">Delete</button>
       <button class="sav" id="p-sav">Save</button>
@@ -163,6 +164,7 @@ header .meta{margin-left:auto;font-size:12px;color:var(--muted)}
   </div>
 </div>
 <div class="toast" id="toast"></div>
+<datalist id="proj-dl"></datalist>
 <script>
 let B={},prev='',cur=null,curCol=null,editing=false,drag=null,dragCol=null;
 const cols=['todo','doing','done'];
@@ -202,6 +204,7 @@ function render(){
   }
   $('meta').textContent=total+' cards';
   if(B.project)$('project').textContent=B.project;
+  $('proj-dl').innerHTML=(B.projects||[]).map(p=>`<option value="${esc(p)}">`).join('');
   bindDrag();
 }
 
@@ -267,7 +270,8 @@ function open_(id,col){
   cur=id;curCol=col;editing=false;
   const c=(B[col]||[]).find(x=>x.id===id);if(!c)return;
   $('panel').classList.add('open');
-  $('p-title').textContent=id.replace(/-/g,' ');
+  $('p-title').textContent=c.slug.replace(/-/g,' ');
+  $('p-proj').value=c.project||'';
   $('p-md').innerHTML=md(c.body||'');
   $('p-ta').value=c.body||'';
   $('p-pri').value=c.priority||'';
@@ -297,8 +301,9 @@ function togEdit(){
 }
 $('p-sav').onclick=async()=>{
   if(!cur)return;
-  const body=$('p-ta').value.trim(),pri=$('p-pri').value||'';
-  await fetch(`/api/cards/${encodeURIComponent(cur)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({body,priority:pri})});
+  const body=$('p-ta').value.trim(),pri=$('p-pri').value||'',proj=$('p-proj').value.trim();
+  const r=await fetch(`/api/cards/${encodeURIComponent(cur)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({body,priority:pri,project:proj})});
+  const j=await r.json();if(j.id)cur=j.id;
   notify('Saved');editing=false;$('p-body').classList.remove('editing');$('p-ed').classList.remove('on');$('p-ed').textContent='Edit';$('p-sav').style.display='none';
   $('p-md').innerHTML=md(body);prev='';load();
 };
@@ -310,14 +315,15 @@ $('p-del').onclick=async()=>{
 
 function addForm(col){
   const el=$('c-'+col);document.querySelectorAll('.add-form').forEach(f=>f.remove());
+  const pf=FILTER&&FILTER!=='__none__'?FILTER:'';
   const d=document.createElement('div');d.className='add-form';
-  d.innerHTML='<input placeholder="Card title..." id="af-t"><textarea placeholder="Description (optional)" rows=2 id="af-b"></textarea><div class="row"><button class="btn-p" onclick="submitC(\''+col+'\')">Add</button><button class="btn-g" onclick="this.closest(\'.add-form\').remove()">Cancel</button></div>';
+  d.innerHTML='<input placeholder="Card title..." id="af-t"><textarea placeholder="Description (optional)" rows=2 id="af-b"></textarea><input placeholder="Project (optional)" id="af-p" list="proj-dl" value="'+pf+'"><div class="row"><button class="btn-p" onclick="submitC(\''+col+'\')">Add</button><button class="btn-g" onclick="this.closest(\'.add-form\').remove()">Cancel</button></div>';
   el.prepend(d);d.querySelector('input').focus();
   d.querySelector('input').onkeydown=e=>{if(e.key==='Enter')submitC(col);if(e.key==='Escape')d.remove()};
 }
 async function submitC(col){
-  const t=$('af-t')?.value?.trim(),b=$('af-b')?.value?.trim();if(!t)return;
-  await fetch('/api/cards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t,body:b||t,column:col})});
+  const t=$('af-t')?.value?.trim(),b=$('af-b')?.value?.trim(),p=$('af-p')?.value?.trim();if(!t)return;
+  await fetch('/api/cards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t,body:b||t,column:col,project:p||null})});
   notify('Added "'+t+'"');prev='';load();
 }
 
