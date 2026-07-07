@@ -35,12 +35,14 @@ p: high
 Task description here.
 ```
 
+Cards can be grouped into **projects** — one-level subfolders inside a column (`.kanban/todo/<project>/<slug>.md`). A card at a column's root has no project. Claude infers and assigns projects automatically when creating cards, reusing an existing project folder when one fits and only inventing a new slug when none does.
+
 ## Operations Reference
 
 | Action | Implementation |
 |--------|----------------|
 | View board | `Glob .kanban/**/*.md` then `Read` each |
-| Add card | `Write` to `.kanban/todo/<slug>.md` |
-| Move card | `mv .kanban/<from>/x.md .kanban/<to>/` |
+| Add card | `Write` to `.kanban/todo/<project>/<slug>.md` (column root if no project) |
+| Move card | `mv .kanban/<from>/x.md .kanban/<to>/`, keeping the project subfolder |
 | Update card | `Edit` the file |
 | Delete card | `rm` the file |

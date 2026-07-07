@@ -50,6 +50,12 @@ header .meta{margin-left:auto;font-size:12px;color:var(--muted)}
 .pri.p-high{background:rgba(255,166,87,.15);color:#ffa657}
 .pri.p-medium{background:rgba(210,153,34,.15);color:#d29922}
 .pri.p-low{background:rgba(139,148,158,.15);color:var(--muted)}
+.card .proj{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;margin:6px 4px 0 0;letter-spacing:.3px}
+.chips{display:flex;gap:6px;margin-left:16px;flex-wrap:wrap}
+.chip{background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:2px 10px;border-radius:12px;cursor:pointer;display:flex;align-items:center;gap:5px}
+.chip:hover{color:var(--text);border-color:#444c56}
+.chip.on{color:var(--text);border-color:var(--accent);background:rgba(88,166,255,.1)}
+.chip .cdot{width:7px;height:7px;border-radius:50%}
 .card .acts{position:absolute;top:6px;right:6px;display:none;gap:2px}
 .card:hover .acts{display:flex}
 .card .acts button{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 5px;border-radius:3px;font-size:12px}
@@ -120,6 +126,7 @@ header .meta{margin-left:auto;font-size:12px;color:var(--muted)}
 <header>
   <div class="dot"></div>
   <h1><span id="project"></span> <span style="color:var(--muted);font-weight:400">/ .kanban</span></h1>
+  <div class="chips" id="chips"></div>
   <span class="meta" id="meta"></span>
 </header>
 <div class="board" id="board">
@@ -149,6 +156,7 @@ header .meta{margin-left:auto;font-size:12px;color:var(--muted)}
     <div class="panel-foot">
       <div class="moves" id="p-mv"></div>
       <select id="p-pri" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text);font-size:11px;outline:none"><option value="">No priority</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+      <input id="p-proj" list="proj-dl" placeholder="No project" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text);font-size:11px;outline:none;width:110px">
       <div class="sp"></div>
       <button class="del" id="p-del">Delete</button>
       <button class="sav" id="p-sav">Save</button>
@@ -156,10 +164,25 @@ header .meta{margin-left:auto;font-size:12px;color:var(--muted)}
   </div>
 </div>
 <div class="toast" id="toast"></div>
+<datalist id="proj-dl"></datalist>
 <script>
 let B={},prev='',cur=null,curCol=null,editing=false,drag=null,dragCol=null;
 const cols=['todo','doing','done'];
 const $=id=>document.getElementById(id);
+
+let FILTER=null;
+const PALETTE=['#58a6ff','#3fb950','#d29922','#f778ba','#a371f7','#ffa657','#39c5cf','#8b949e'];
+function projColor(p){let h=0;for(const ch of p)h=(h*31+ch.charCodeAt(0))>>>0;return PALETTE[h%PALETTE.length]}
+function renderChips(){
+  const ps=B.projects||[],el=$('chips');
+  if(!ps.length){el.innerHTML='';FILTER=null;return}
+  if(FILTER&&FILTER!=='__none__'&&!ps.includes(FILTER))FILTER=null;
+  const hasNone=cols.some(c=>(B[c]||[]).some(x=>!x.project));
+  if(FILTER==='__none__'&&!hasNone)FILTER=null;
+  const mk=(v,l,dot)=>`<button class="chip${FILTER===v?' on':''}" data-f="${esc(v===null?'':v)}">${dot?`<span class="cdot" style="background:${projColor(l)}"></span>`:''}${esc(l)}</button>`;
+  el.innerHTML=mk(null,'All')+ps.map(p=>mk(p,p,true)).join('')+(hasNone?mk('__none__','none'):'');
+  el.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{FILTER=b.dataset.f||null;render()});
+}
 
 async function load(){
   const r=await fetch('/api/board');
@@ -170,25 +193,31 @@ async function load(){
 }
 
 function render(){
+  renderChips();
+  const vis=x=>FILTER===null||(FILTER==='__none__'?!x.project:x.project===FILTER);
+  let total=0;
   for(const c of cols){
-    const cards=B[c]||[];
+    const cards=(B[c]||[]).filter(vis);
+    total+=cards.length;
     $('n-'+c).textContent=cards.length;
     const el=$('c-'+c);
     el.innerHTML=cards.length?cards.map(x=>card(x,c)).join(''):'<div class="empty">Drop here</div>';
   }
-  const total=cols.reduce((a,c)=>(B[c]||[]).length+a,0);
   $('meta').textContent=total+' cards';
   if(B.project)$('project').textContent=B.project;
+  $('proj-dl').innerHTML=(B.projects||[]).map(p=>`<option value="${esc(p)}">`).join('');
   bindDrag();
 }
 
 function card(c,col){
   const sel=cur===c.id?' sel':'';
+  const pc=c.project?projColor(c.project):'';
+  const proj=c.project?`<span class="proj" style="color:${pc};background:${pc}26">${esc(c.project)}</span>`:'';
   const pri=c.priority?`<div class="pri p-${c.priority}">${c.priority}</div>`:'';
   const body=c.body?'<div class="b">'+md(c.body)+'</div>':'';
   const L=col!=='todo'?`<button onclick="ev(event);mv('${c.id}','${col}','${cols[cols.indexOf(col)-1]}')">&larr;</button>`:'';
   const R=col!=='done'?`<button onclick="ev(event);mv('${c.id}','${col}','${cols[cols.indexOf(col)+1]}')">&rarr;</button>`:'';
-  return`<div class="card${sel}" draggable="true" data-id="${c.id}" data-col="${col}" onclick="open_('${c.id}','${col}')"><div class="acts">${L}${R}</div><div class="t">${esc(c.id.replace(/-/g,' '))}</div>${body}${pri}</div>`;
+  return`<div class="card${sel}" draggable="true" data-id="${c.id}" data-col="${col}" onclick="open_('${c.id}','${col}')"><div class="acts">${L}${R}</div><div class="t">${esc(c.slug.replace(/-/g,' '))}</div>${body}${proj}${pri}</div>`;
 }
 function ev(e){e.stopPropagation()}
 
@@ -227,9 +256,12 @@ function bindDrag(){
 }
 
 async function mv(id,from,to){
-  await fetch(`/api/cards/${encodeURIComponent(id)}/move`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({from,to})});
-  notify(id.replace(/-/g,' ')+' → '+to);
-  if(cur===id){curCol=to;panelMeta()}
+  const r=await fetch(`/api/cards/${encodeURIComponent(id)}/move`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({from,to})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){notify('Move failed');return}
+  const nid=j.id||id;
+  notify(nid.split('/').pop().replace(/-/g,' ')+' → '+to+(nid!==id?' (renamed)':''));
+  if(cur===id){cur=nid;curCol=to;panelMeta()}
   prev='';load();
 }
 
@@ -239,7 +271,8 @@ function open_(id,col){
   cur=id;curCol=col;editing=false;
   const c=(B[col]||[]).find(x=>x.id===id);if(!c)return;
   $('panel').classList.add('open');
-  $('p-title').textContent=id.replace(/-/g,' ');
+  $('p-title').textContent=c.slug.replace(/-/g,' ');
+  $('p-proj').value=c.project||'';
   $('p-md').innerHTML=md(c.body||'');
   $('p-ta').value=c.body||'';
   $('p-pri').value=c.priority||'';
@@ -269,8 +302,9 @@ function togEdit(){
 }
 $('p-sav').onclick=async()=>{
   if(!cur)return;
-  const body=$('p-ta').value.trim(),pri=$('p-pri').value||'';
-  await fetch(`/api/cards/${encodeURIComponent(cur)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({body,priority:pri})});
+  const body=$('p-ta').value.trim(),pri=$('p-pri').value||'',proj=$('p-proj').value.trim();
+  const r=await fetch(`/api/cards/${encodeURIComponent(cur)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({body,priority:pri,project:proj})});
+  const j=await r.json();if(j.id)cur=j.id;
   notify('Saved');editing=false;$('p-body').classList.remove('editing');$('p-ed').classList.remove('on');$('p-ed').textContent='Edit';$('p-sav').style.display='none';
   $('p-md').innerHTML=md(body);prev='';load();
 };
@@ -282,14 +316,15 @@ $('p-del').onclick=async()=>{
 
 function addForm(col){
   const el=$('c-'+col);document.querySelectorAll('.add-form').forEach(f=>f.remove());
+  const pf=FILTER&&FILTER!=='__none__'?FILTER:'';
   const d=document.createElement('div');d.className='add-form';
-  d.innerHTML='<input placeholder="Card title..." id="af-t"><textarea placeholder="Description (optional)" rows=2 id="af-b"></textarea><div class="row"><button class="btn-p" onclick="submitC(\''+col+'\')">Add</button><button class="btn-g" onclick="this.closest(\'.add-form\').remove()">Cancel</button></div>';
+  d.innerHTML='<input placeholder="Card title..." id="af-t"><textarea placeholder="Description (optional)" rows=2 id="af-b"></textarea><input placeholder="Project (optional)" id="af-p" list="proj-dl" value="'+esc(pf)+'"><div class="row"><button class="btn-p" onclick="submitC(\''+col+'\')">Add</button><button class="btn-g" onclick="this.closest(\'.add-form\').remove()">Cancel</button></div>';
   el.prepend(d);d.querySelector('input').focus();
   d.querySelector('input').onkeydown=e=>{if(e.key==='Enter')submitC(col);if(e.key==='Escape')d.remove()};
 }
 async function submitC(col){
-  const t=$('af-t')?.value?.trim(),b=$('af-b')?.value?.trim();if(!t)return;
-  await fetch('/api/cards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t,body:b||t,column:col})});
+  const t=$('af-t')?.value?.trim(),b=$('af-b')?.value?.trim(),p=$('af-p')?.value?.trim();if(!t)return;
+  await fetch('/api/cards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t,body:b||t,column:col,project:p||null})});
   notify('Added "'+t+'"');prev='';load();
 }
 

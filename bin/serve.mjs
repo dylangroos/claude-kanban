@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { createServer } from "node:http";
-import { readdir, readFile, rename, writeFile, unlink, mkdir } from "node:fs/promises";
-import { join, resolve, basename } from "node:path";
+import { readdir, readFile, rename, writeFile, unlink, mkdir, rmdir } from "node:fs/promises";
+import { join, resolve, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { exec } from "node:child_process";
@@ -58,25 +58,42 @@ function toFrontmatter(meta, body) {
   return `---\n${yaml}\n---\n${body}\n`;
 }
 
-// Read board state
+// Read board state (column root + one level of project subdirs)
 async function getBoard() {
   const board = {};
+  const projects = new Set();
   for (const col of COLUMNS) {
     const dir = join(BOARD, col);
-    const files = (await readdir(dir)).filter((f) => f.endsWith(".md"));
     board[col] = [];
-    for (const f of files) {
-      const raw = await readFile(join(dir, f));
-      const { meta, body } = parseFrontmatter(raw);
-      board[col].push({
-        id: f.replace(/\.md$/, ""),
-        file: f,
-        body,
-        priority: meta.priority || meta.p || null,
-      });
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.isFile() && e.name.endsWith(".md")) {
+        board[col].push(await readCard(join(dir, e.name), e.name, null));
+      } else if (e.isDirectory() && !e.name.startsWith(".")) {
+        projects.add(e.name);
+        const files = (await readdir(join(dir, e.name), { withFileTypes: true })).filter((f) => f.isFile() && f.name.endsWith(".md"));
+        for (const f of files) {
+          board[col].push(await readCard(join(dir, e.name, f.name), f.name, e.name));
+        }
+      }
     }
   }
+  board.projects = [...projects].sort();
   return board;
+}
+
+async function readCard(path, file, project) {
+  const raw = await readFile(path);
+  const { meta, body } = parseFrontmatter(raw);
+  const slug = file.replace(/\.md$/, "");
+  return {
+    id: project ? `${project}/${slug}` : slug,
+    slug,
+    file,
+    project,
+    body,
+    priority: meta.priority || meta.p || null,
+  };
 }
 
 // Simple slug
@@ -85,6 +102,35 @@ function slugify(str) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+// Composite card ids: "project/slug" or bare "slug"
+function splitId(id) {
+  if (id.includes("..") || id.startsWith("/")) throw new Error("bad id");
+  const i = id.indexOf("/");
+  if (i === -1) return { project: null, slug: id };
+  const slug = id.slice(i + 1);
+  if (slug.includes("/")) throw new Error("bad id");
+  return { project: id.slice(0, i), slug };
+}
+
+function cardPath(col, id) {
+  const { project, slug } = splitId(id);
+  return project ? join(BOARD, col, project, `${slug}.md`) : join(BOARD, col, `${slug}.md`);
+}
+
+// Remove a card's project dir if now empty (best-effort)
+async function pruneEmpty(col, id) {
+  const { project } = splitId(id);
+  if (!project) return;
+  try { await rmdir(join(BOARD, col, project)); } catch {}
+}
+
+// Next collision-free slug in a directory: slug, slug-2, slug-3, ...
+function freeSlug(dir, slug) {
+  let s = slug, n = 2;
+  while (existsSync(join(dir, `${s}.md`))) s = `${slug}-${n++}`;
+  return s;
 }
 
 // Route helpers
@@ -118,55 +164,79 @@ const server = createServer(async (req, res) => {
       return json(res, b);
     }
 
-    // API: POST /api/cards  { title, body?, priority?, column? }
+    // API: POST /api/cards  { title, body?, priority?, column?, project? }
     if (path === "/api/cards" && req.method === "POST") {
       const data = await body(req);
       const col = data.column || "todo";
-      const slug = slugify(data.title || "untitled");
-      const file = `${slug}.md`;
+      if (!COLUMNS.includes(col)) return json(res, { error: "bad column" }, 400);
+      const project = data.project ? slugify(data.project) : null;
+      const dir = project ? join(BOARD, col, project) : join(BOARD, col);
+      await mkdir(dir, { recursive: true });
+      const slug = freeSlug(dir, slugify(data.title || "untitled"));
       const meta = {};
       if (data.priority) meta.priority = data.priority;
-      await writeFile(join(BOARD, col, file), toFrontmatter(meta, data.body || data.title || ""));
-      return json(res, { ok: true, id: slug }, 201);
+      await writeFile(join(dir, `${slug}.md`), toFrontmatter(meta, data.body || data.title || ""));
+      return json(res, { ok: true, id: project ? `${project}/${slug}` : slug }, 201);
     }
 
-    // API: PUT /api/cards/:id/move  { from, to }
+    // API: PUT /api/cards/:id/move  { from, to }  (id may be "project/slug"; collisions auto-rename)
     if (path.match(/^\/api\/cards\/[^/]+\/move$/) && req.method === "PUT") {
       const id = decodeURIComponent(path.split("/")[3]);
       const data = await body(req);
-      const src = join(BOARD, data.from, `${id}.md`);
-      const dst = join(BOARD, data.to, `${id}.md`);
-      await rename(src, dst);
-      return json(res, { ok: true });
+      if (!COLUMNS.includes(data.from) || !COLUMNS.includes(data.to)) return json(res, { error: "bad column" }, 400);
+      const { project, slug } = splitId(id);
+      const dir = project ? join(BOARD, data.to, project) : join(BOARD, data.to);
+      await mkdir(dir, { recursive: true });
+      const s = freeSlug(dir, slug);
+      await rename(cardPath(data.from, id), join(dir, `${s}.md`));
+      await pruneEmpty(data.from, id);
+      return json(res, { ok: true, id: project ? `${project}/${s}` : s });
     }
 
-    // API: PUT /api/cards/:id  { body?, priority?, column }
+    // API: PUT /api/cards/:id  { body?, priority?, project? }
     if (path.match(/^\/api\/cards\/[^/]+$/) && req.method === "PUT") {
       const id = decodeURIComponent(path.split("/")[3]);
       const data = await body(req);
-      const file = `${id}.md`;
-      // Find which column it's in
       let found = null;
       for (const col of COLUMNS) {
-        if (existsSync(join(BOARD, col, file))) { found = col; break; }
+        if (existsSync(cardPath(col, id))) { found = col; break; }
       }
       if (!found) return json(res, { error: "not found" }, 404);
-      const raw = await readFile(join(BOARD, found, file));
+      const src = cardPath(found, id);
+      const raw = await readFile(src);
       const parsed = parseFrontmatter(raw);
       const meta = { ...parsed.meta };
       if ("priority" in data) { meta.priority = data.priority || ""; delete meta.p; }
       const newBody = "body" in data ? data.body : parsed.body;
-      await writeFile(join(BOARD, found, file), toFrontmatter(meta, newBody));
-      return json(res, { ok: true });
+      let newId = id;
+      if ("project" in data) {
+        const { slug } = splitId(id);
+        const proj = data.project ? slugify(data.project) : null;
+        newId = proj ? `${proj}/${slug}` : slug;
+      }
+      let dst = cardPath(found, newId);
+      if (dst !== src) {
+        await mkdir(dirname(dst), { recursive: true });
+        const { project: np, slug: ns } = splitId(newId);
+        const s = freeSlug(dirname(dst), ns);
+        newId = np ? `${np}/${s}` : s;
+        dst = cardPath(found, newId);
+      }
+      await writeFile(dst, toFrontmatter(meta, newBody));
+      if (dst !== src) { await unlink(src); await pruneEmpty(found, id); }
+      return json(res, { ok: true, id: newId });
     }
 
-    // API: DELETE /api/cards/:id  { column }
+    // API: DELETE /api/cards/:id
     if (path.match(/^\/api\/cards\/[^/]+$/) && req.method === "DELETE") {
       const id = decodeURIComponent(path.split("/")[3]);
-      const file = `${id}.md`;
       for (const col of COLUMNS) {
-        const p = join(BOARD, col, file);
-        if (existsSync(p)) { await unlink(p); return json(res, { ok: true }); }
+        const p = cardPath(col, id);
+        if (existsSync(p)) {
+          await unlink(p);
+          await pruneEmpty(col, id);
+          return json(res, { ok: true });
+        }
       }
       return json(res, { error: "not found" }, 404);
     }

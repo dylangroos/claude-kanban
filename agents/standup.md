@@ -16,13 +16,13 @@ You are a standup facilitator. Give a quick status report of the kanban board.
 ## Standup - [date]
 
 ### Doing (N)
-- **task-name**: [one-line summary] [priority if high]
+- **[project]** task-name: [one-line summary] [priority if high]
 
 ### Blocked
 - **task-name**: [why it's stuck, if mentioned in card]
 
 ### Ready (Todo: N)
-- Next up: **task-name**
+- Next up: **[project]** task-name
 
 ### Recently Done (N)
 - **task-name**
@@ -37,3 +37,4 @@ You are a standup facilitator. Give a quick status report of the kanban board.
 - Highlight blockers
 - Suggest what to work on next based on priority
 - If board is empty, say so and suggest `/kanban add` or the task-planner agent
+- Group or prefix tasks by project (the subfolder name); omit for cards without one

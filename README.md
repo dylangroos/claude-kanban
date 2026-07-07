@@ -4,7 +4,7 @@ Filesystem-based kanban board for Claude Code. No servers, no databases, just fo
 
 ```
 .kanban/
-├── todo/           fix-login-bug.md
+├── todo/           auth/fix-login-bug.md
 ├── doing/          refactor-api.md
 └── done/           setup-eslint.md
 ```
@@ -82,6 +82,17 @@ p: high
 ---
 Users on Safari get stuck in redirect loop after OAuth login.
 ```
+
+## Projects
+
+Group cards by dropping them in a subfolder — the folder name is the project:
+
+```
+.kanban/todo/auth/add-login-form.md   ← project "auth"
+.kanban/todo/quick-fix.md             ← no project
+```
+
+Claude assigns projects automatically when it creates cards (it reuses existing folders or infers a slug from the feature). In the web UI, projects show as colored badges with filter chips in the header.
 
 ## Agents
 
