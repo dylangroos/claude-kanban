@@ -317,10 +317,12 @@ function renderSess(){
   if(s.status==='running'||s.status==='stopping')h+=`<pre class="slog" id="slog"></pre>`;
   el.innerHTML=h;
   if(s.status==='running'||s.status==='stopping'){
+    const sid=cur;
     const poll=async()=>{
-      if(!cur)return;
-      const r=await fetch(`/api/sessions/${encodeURIComponent(cur)}/log`);
+      if(cur!==sid)return;
+      const r=await fetch(`/api/sessions/${encodeURIComponent(sid)}/log`);
       const j=await r.json().catch(()=>({log:''}));
+      if(cur!==sid)return;
       const p=$('slog');if(p){p.textContent=j.log||'';p.scrollTop=p.scrollHeight}
     };
     poll();logT=setInterval(poll,2000);
