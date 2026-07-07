@@ -462,7 +462,7 @@ Add with the other routes (all agent routes wrapped in `if (AGENTS && ...)`):
         await mkdir(dirname(src), { recursive: true });
         await rename(dst, src).catch(() => {});
         await pruneEmpty("doing", id);
-        return json(res, { error: err.message }, err.code ? 409 : 500);
+        return json(res, { error: err.message }, ["limit", "exists"].includes(err.code) ? 409 : 500);
       }
       return json(res, { ok: true });
     }
