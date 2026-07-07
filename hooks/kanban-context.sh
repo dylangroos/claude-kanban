@@ -6,7 +6,7 @@ if [ -d ".kanban" ]; then
   todo_count=$(find .kanban/todo -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
   doing_count=$(find .kanban/doing -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
   done_count=$(find .kanban/done -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
-  projects=$(find .kanban -mindepth 2 -maxdepth 2 -type d 2>/dev/null | awk -F/ '{print $3}' | sort -u | paste -sd, -)
+  projects=$(find .kanban -mindepth 2 -maxdepth 2 -type d -not -name '.*' 2>/dev/null | awk -F/ '{print $3}' | sort -u | paste -sd, -)
 
   cat <<EOF
 <kanban-context>

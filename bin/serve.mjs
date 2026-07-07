@@ -71,9 +71,9 @@ async function getBoard() {
         board[col].push(await readCard(join(dir, e.name), e.name, null));
       } else if (e.isDirectory() && !e.name.startsWith(".")) {
         projects.add(e.name);
-        const files = (await readdir(join(dir, e.name))).filter((f) => f.endsWith(".md"));
+        const files = (await readdir(join(dir, e.name), { withFileTypes: true })).filter((f) => f.isFile() && f.name.endsWith(".md"));
         for (const f of files) {
-          board[col].push(await readCard(join(dir, e.name, f), f, e.name));
+          board[col].push(await readCard(join(dir, e.name, f.name), f.name, e.name));
         }
       }
     }
@@ -109,7 +109,9 @@ function splitId(id) {
   if (id.includes("..") || id.startsWith("/")) throw new Error("bad id");
   const i = id.indexOf("/");
   if (i === -1) return { project: null, slug: id };
-  return { project: id.slice(0, i), slug: id.slice(i + 1) };
+  const slug = id.slice(i + 1);
+  if (slug.includes("/")) throw new Error("bad id");
+  return { project: id.slice(0, i), slug };
 }
 
 function cardPath(col, id) {
@@ -166,6 +168,7 @@ const server = createServer(async (req, res) => {
     if (path === "/api/cards" && req.method === "POST") {
       const data = await body(req);
       const col = data.column || "todo";
+      if (!COLUMNS.includes(col)) return json(res, { error: "bad column" }, 400);
       const project = data.project ? slugify(data.project) : null;
       const dir = project ? join(BOARD, col, project) : join(BOARD, col);
       await mkdir(dir, { recursive: true });
@@ -180,6 +183,7 @@ const server = createServer(async (req, res) => {
     if (path.match(/^\/api\/cards\/[^/]+\/move$/) && req.method === "PUT") {
       const id = decodeURIComponent(path.split("/")[3]);
       const data = await body(req);
+      if (!COLUMNS.includes(data.from) || !COLUMNS.includes(data.to)) return json(res, { error: "bad column" }, 400);
       const { project, slug } = splitId(id);
       const dir = project ? join(BOARD, data.to, project) : join(BOARD, data.to);
       await mkdir(dir, { recursive: true });
