@@ -176,7 +176,7 @@ function renderChips(){
   if(!ps.length){el.innerHTML='';FILTER=null;return}
   if(FILTER&&FILTER!=='__none__'&&!ps.includes(FILTER))FILTER=null;
   const hasNone=cols.some(c=>(B[c]||[]).some(x=>!x.project));
-  const mk=(v,l,dot)=>`<button class="chip${FILTER===v?' on':''}" data-f="${v===null?'':v}">${dot?`<span class="cdot" style="background:${projColor(l)}"></span>`:''}${esc(l)}</button>`;
+  const mk=(v,l,dot)=>`<button class="chip${FILTER===v?' on':''}" data-f="${esc(v===null?'':v)}">${dot?`<span class="cdot" style="background:${projColor(l)}"></span>`:''}${esc(l)}</button>`;
   el.innerHTML=mk(null,'All')+ps.map(p=>mk(p,p,true)).join('')+(hasNone?mk('__none__','none'):'');
   el.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{FILTER=b.dataset.f||null;render()});
 }
