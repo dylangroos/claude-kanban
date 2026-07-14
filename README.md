@@ -102,9 +102,11 @@ Enable with `npx dot-kanban --agents` (or `KANBAN_AGENTS=1`). A ▶ button appea
 
 Each dispatch runs in an isolated git worktree on its own branch — `kanban/<card-id>`, with `/` in the id replaced by `--` (e.g. `kanban/api--do-thing`) — so your checkout is untouched while the agent works. Watch it live in the session panel, then when it finishes:
 - **Review** the summary and full diff on the card (**View diff**)
-- **Merge** to merge the branch into your checkout (a merge commit, `--no-ff`) and clean up the worktree,
-- **Open PR** to push the branch to `origin` and open a GitHub PR from the card title and agent summary — needs the [`gh` CLI](https://cli.github.com) installed and authed (`gh auth status`), an `origin` remote, and a checked-out branch as base (detached HEAD is rejected). The card stays in doing with a link to the PR; discard it later to drop the local branch, or
+- **Open PR** to push the branch to `origin` and open a GitHub PR from the card title and agent summary — needs the [`gh` CLI](https://cli.github.com) installed and authed (`gh auth status`), an `origin` remote, and a checked-out branch as base (detached HEAD is rejected). The card stays in doing with a link to the PR; discard it later to drop the local branch
+- **Merge** to merge the branch into your checkout (a merge commit, `--no-ff`) and clean up the worktree — asks for confirmation first
 - **Discard** to drop the branch and return the card to todo
+
+When an `origin` remote is configured, Open PR is shown first and styled as primary, with Merge second; with no `origin`, only Merge is offered since Open PR would just 409. Pass `--require-pr` (or `KANBAN_REQUIRE_PR=1`) to hide Merge entirely and force every session through a PR — local merges then 409 server-side too, as a backstop.
 
 Env knobs:
 - `KANBAN_MAX_AGENTS` - concurrent session cap (default 3)
@@ -112,6 +114,7 @@ Env knobs:
   The allowlist is your real safety boundary — a dispatched worker can run anything it matches, so widen it deliberately.
 - `KANBAN_CLAUDE_BIN` - path to the `claude` binary (default `claude`)
 - `KANBAN_GH_BIN` - path to the `gh` binary used by Open PR (default `gh`)
+- `KANBAN_REQUIRE_PR` - set to `1` to disable local Merge and require every session to go through Open PR (same as `--require-pr`)
 
 If the agent tries a command outside `KANBAN_AGENT_TOOLS`, the session fails fast rather than prompting — widen the allowlist and retry. Session metadata lives in `.kanban/.agents/`; add it to `.gitignore`. The server only binds `127.0.0.1`, agents mode included.
 

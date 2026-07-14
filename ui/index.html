@@ -295,7 +295,7 @@ async function work(id){
   notify(r.ok?'Agent dispatched':'Dispatch failed: '+(j.error||r.status));
   prev='';load();
 }
-const sconf={discard:'Discard this agent\'s work? The branch will be deleted.',pr:'Push this branch to origin and open a GitHub PR?'};
+const sconf={discard:'Discard this agent\'s work? The branch will be deleted.',pr:'Push this branch to origin and open a GitHub PR?',merge:'Merge this branch into your local checkout?'};
 async function sact(a){
   if(!cur)return;
   if(sconf[a]&&!confirm(sconf[a]))return;
@@ -333,7 +333,7 @@ function renderSess(){
   const cost=s.cost!=null?`<span class="scost">$${s.cost.toFixed(4)}</span>`:'';
   let h=`<div class="srow"><span class="ast a-${s.status}">${s.status}</span>${cost}<code>${esc(s.branch||'')}</code><div class="sp"></div>`;
   if(s.status==='running')h+=`<button class="sbtn bad" onclick="sact('stop')">Stop</button>`;
-  if(s.status==='review'){if(s.commits)h+=`<button class="sbtn ok" onclick="sact('merge')">Merge</button><button class="sbtn" onclick="sact('pr')">Open PR</button>`;h+=`<button class="sbtn" onclick="toggleDiff()">View diff</button><button class="sbtn bad" onclick="sact('discard')">Discard</button>`}
+  if(s.status==='review'){if(s.commits)h+=B.requirePr?`<button class="sbtn ok" onclick="sact('pr')">Open PR</button>`:B.hasOrigin?`<button class="sbtn ok" onclick="sact('pr')">Open PR</button><button class="sbtn" onclick="sact('merge')">Merge</button>`:`<button class="sbtn ok" onclick="sact('merge')">Merge</button>`;h+=`<button class="sbtn" onclick="toggleDiff()">View diff</button><button class="sbtn bad" onclick="sact('discard')">Discard</button>`}
   if(s.status==='pr')h+=`<button class="sbtn" onclick="toggleDiff()">View diff</button><button class="sbtn bad" onclick="sact('discard')">Discard</button>`;
   if(s.status==='failed'||s.status==='interrupted')h+=`<button class="sbtn" onclick="sact('retry')">Retry</button><button class="sbtn bad" onclick="sact('discard')">Discard</button>`;
   h+='</div>';
