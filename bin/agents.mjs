@@ -22,6 +22,7 @@ export function createAgentManager({ board, repoRoot }) {
   const branchOf = (id) => `kanban/${flat(id)}`;
 
   const git = async (a, cwd = repoRoot) => (await exec("git", a, { cwd })).stdout.trim();
+  const errTail = (err, fallback) => (err.stderr || err.stdout || "").toString().trim().split("\n").pop() || fallback;
 
   async function readMeta(id) {
     try { return JSON.parse(await readFile(metaPath(id), "utf8")); } catch { return null; }
@@ -166,8 +167,7 @@ export function createAgentManager({ board, repoRoot }) {
       await git(["merge", "--no-ff", "--no-edit", meta.branch]);
     } catch (mergeErr) {
       await git(["merge", "--abort"]).catch(() => {});
-      const detail = (mergeErr.stderr || mergeErr.stdout || "").toString().trim().split("\n").pop() || "merge failed";
-      const e = new Error(`${detail}; branch preserved: ${meta.branch}`);
+      const e = new Error(`${errTail(mergeErr, "merge failed")}; branch preserved: ${meta.branch}`);
       e.code = "conflict"; throw e;
     }
     await cleanupArtifacts(id);
@@ -184,8 +184,7 @@ export function createAgentManager({ board, repoRoot }) {
     try {
       await git(["remote", "get-url", "origin"]);
     } catch (originErr) {
-      const detail = (originErr.stderr || originErr.stdout || "").toString().trim().split("\n").pop() || "no origin remote";
-      const e = new Error(detail); e.code = "conflict"; throw e;
+      const e = new Error(errTail(originErr, "no origin remote")); e.code = "conflict"; throw e;
     }
     try {
       await git(["push", "origin", `${meta.branch}:${meta.branch}`]);
@@ -204,8 +203,7 @@ export function createAgentManager({ board, repoRoot }) {
       live.delete(flat(id));
       return { url };
     } catch (prErr) {
-      const detail = (prErr.stderr || prErr.stdout || "").toString().trim().split("\n").pop() || prErr.message || "pr creation failed";
-      const e = new Error(detail); e.code = "conflict"; throw e;
+      const e = new Error(errTail(prErr, prErr.message || "pr creation failed")); e.code = "conflict"; throw e;
     }
   }
 
@@ -229,8 +227,7 @@ export function createAgentManager({ board, repoRoot }) {
       const out = stdout.toString();
       return { diff: out.slice(0, DIFF_CAP), truncated: out.length > DIFF_CAP };
     } catch (diffErr) {
-      const detail = (diffErr.stderr || diffErr.stdout || "").toString().trim().split("\n").pop() || "diff failed";
-      const e = new Error(detail); e.code = "state"; throw e;
+      const e = new Error(errTail(diffErr, "diff failed")); e.code = "state"; throw e;
     }
   }
 

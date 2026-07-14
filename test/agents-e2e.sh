@@ -28,7 +28,7 @@ start() { # start [extra env...] -- [server args...]
     node "$ROOT/bin/serve.mjs" "$REPO" ${AGENTS_FLAG:-} & PID=$!; sleep 1
 }
 stop_srv() { kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true; PID=""; }
-jget() { curl -s "localhost:$PORT$1" | node -e "const b=JSON.parse(require('fs').readFileSync(0));console.log(eval(process.argv[1]))" "$2"; }
+jget() { jexpr "$(curl -s "localhost:$PORT$1")" "$2"; }
 # jexpr JSON_STRING EXPR — same as jget but evals against an already-captured JSON body.
 jexpr() { node -e "const b=JSON.parse(process.argv[1]);console.log(eval(process.argv[2]))" "$1" "$2"; }
 # post_pr ID — POST /api/sessions/ID/pr, sets $pr_code and $pr_body.
