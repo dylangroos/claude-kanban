@@ -14,7 +14,10 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 const args = process.argv.slice(2);
 const AGENTS = args.includes("--agents") || process.env.KANBAN_AGENTS === "1";
-const REQUIRE_PR = args.includes("--require-pr") || process.env.KANBAN_REQUIRE_PR === "1";
+const REQUIRE_PR_ON = args.includes("--require-pr") || process.env.KANBAN_REQUIRE_PR === "1";
+const ALLOW_MERGE = args.includes("--allow-merge") || process.env.KANBAN_REQUIRE_PR === "0";
+// gated whenever origin exists, unless explicitly allowed; only called when `agents` exists
+const requirePr = async () => REQUIRE_PR_ON || (!ALLOW_MERGE && await agents.hasOrigin());
 
 // Resolve board: CLI arg > env var > walk up from cwd to find .kanban/
 function findBoard() {
@@ -181,7 +184,7 @@ const server = createServer(async (req, res) => {
       if (agents) {
         b.sessions = await agents.sessions();
         b.hasOrigin = await agents.hasOrigin();
-        b.requirePr = REQUIRE_PR;
+        b.requirePr = REQUIRE_PR_ON || (!ALLOW_MERGE && b.hasOrigin);
       }
       return json(res, b);
     }
@@ -301,7 +304,7 @@ const server = createServer(async (req, res) => {
           return json(res, { ok: true, url });
         }
         if (action === "merge") {
-          if (REQUIRE_PR) return json(res, { error: "local merge disabled by require-pr; use Open PR" }, 409);
+          if (await requirePr()) return json(res, { error: "local merge disabled by require-pr; use Open PR" }, 409);
           await agents.merge(id);
           const from = cardPath("doing", id);
           if (existsSync(from)) {

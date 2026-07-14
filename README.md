@@ -106,7 +106,7 @@ Each dispatch runs in an isolated git worktree on its own branch — `kanban/<ca
 - **Merge** to merge the branch into your checkout (a merge commit, `--no-ff`) and clean up the worktree — asks for confirmation first
 - **Discard** to drop the branch and return the card to todo
 
-When an `origin` remote is configured, Open PR is shown first and styled as primary, with Merge second; with no `origin`, only Merge is offered since Open PR would just 409. Pass `--require-pr` (or `KANBAN_REQUIRE_PR=1`) to hide Merge entirely and force every session through a PR — local merges then 409 server-side too, as a backstop.
+When an `origin` remote is configured, PR is required by default: Open PR is the only action shown, and local merges 409 server-side too, as a backstop. Pass `--allow-merge` (or `KANBAN_REQUIRE_PR=0`) to restore local Merge alongside Open PR. Repos with no `origin` are unaffected — only Merge is offered, since Open PR would just 409. `--require-pr` (or `KANBAN_REQUIRE_PR=1`) forces the PR-only gate even without an `origin`.
 
 Env knobs:
 - `KANBAN_MAX_AGENTS` - concurrent session cap (default 3)
@@ -114,7 +114,7 @@ Env knobs:
   The allowlist is your real safety boundary — a dispatched worker can run anything it matches, so widen it deliberately.
 - `KANBAN_CLAUDE_BIN` - path to the `claude` binary (default `claude`)
 - `KANBAN_GH_BIN` - path to the `gh` binary used by Open PR (default `gh`)
-- `KANBAN_REQUIRE_PR` - set to `1` to disable local Merge and require every session to go through Open PR (same as `--require-pr`)
+- `KANBAN_REQUIRE_PR` - set to `1` to force the PR-only gate (same as `--require-pr`), or `0` to force local Merge back on even with an `origin` (same as `--allow-merge`)
 
 If the agent tries a command outside `KANBAN_AGENT_TOOLS`, the session fails fast rather than prompting — widen the allowlist and retry. Session metadata lives in `.kanban/.agents/`; add it to `.gitignore`. The server only binds `127.0.0.1`, agents mode included.
 
