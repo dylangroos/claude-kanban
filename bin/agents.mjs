@@ -46,10 +46,14 @@ export function createAgentManager({ board, repoRoot }) {
     }
   }
 
-  async function cleanupArtifacts(id) {
+  async function removeWorktree(id) {
     await git(["worktree", "remove", "--force", wtPath(id)]).catch(() => {});
     await rm(wtPath(id), { recursive: true, force: true }).catch(() => {});
     await git(["worktree", "prune"]).catch(() => {});
+  }
+
+  async function cleanupArtifacts(id) {
+    await removeWorktree(id);
     await git(["branch", "-D", branchOf(id)]).catch(() => {});
   }
 
@@ -196,9 +200,7 @@ export function createAgentManager({ board, repoRoot }) {
       meta.status = "pr";
       meta.prUrl = url;
       await writeMeta(meta);
-      await git(["worktree", "remove", "--force", wtPath(id)]).catch(() => {});
-      await rm(wtPath(id), { recursive: true, force: true }).catch(() => {});
-      await git(["worktree", "prune"]).catch(() => {});
+      await removeWorktree(id);
       live.delete(flat(id));
       return { url };
     } catch (prErr) {

@@ -119,6 +119,7 @@ assert_eq "$(jget /api/board "!!b.sessions['api/pr-thing'].prUrl")" "true" "prUr
 assert_eq "$(git -C "$REPO" branch --list 'kanban/api--pr-thing' | wc -l | tr -d ' ')" "1" "local pr branch preserved"
 assert_eq "$(node -e "console.log(require('fs').existsSync(require('path').join(require('os').tmpdir(),'dot-kanban-agents','fixture','api--pr-thing')))")" "false" "worktree cleaned up after pr"
 assert_eq "$(git -C "$ORIGIN" branch --list 'kanban/*' | wc -l | tr -d ' ')" "1" "origin received the pushed branch"
+assert_eq "$(jget /api/sessions/api%2Fpr-thing/diff "b.diff.includes('fake-work.txt')")" "true" "diff still served in pr state (worktree gone)"
 
 # --- discard a pr-status session: branch + metadata gone, card returns to todo ---
 assert_eq "$(curl -s -X POST localhost:$PORT/api/sessions/api%2Fpr-thing/discard)" '{"ok":true}' "discard pr-status session"

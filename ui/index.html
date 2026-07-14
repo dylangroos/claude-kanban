@@ -344,7 +344,7 @@ function renderSess(){
   if(s.status==='failed'||s.status==='interrupted')h+=`<button class="sbtn" onclick="sact('retry')">Retry</button><button class="sbtn bad" onclick="sact('discard')">Discard</button>`;
   h+='</div>';
   if(s.status==='review')h+=`<div class="ssum">${md(s.summary||'')}${s.commits?`<pre>${esc(s.diffstat||'')}</pre>`:'<em>no changes were committed</em>'}</div>`;
-  if(s.status==='pr'&&s.prUrl)h+=`<div class="ssum"><a class="slink" href="${esc(s.prUrl||'')}" target="_blank" rel="noopener">${esc(s.prUrl||'')}</a></div>`;
+  if(s.status==='pr'&&s.prUrl)h+=`<div class="ssum">${/^https?:\/\//i.test(s.prUrl)?`<a class="slink" href="${esc(s.prUrl)}" target="_blank" rel="noopener">${esc(s.prUrl)}</a>`:esc(s.prUrl)}</div>`;
   if(s.status==='failed'&&s.error)h+=`<div class="serr">${esc(s.error)}</div>`;
   if(s.status==='interrupted')h+=`<div class="serr">Server restarted mid-session. Take over: <code>claude --resume ${esc(s.sessionId||'?')}</code></div>`;
   if(s.status==='running'||s.status==='stopping')h+=`<pre class="slog" id="slog"></pre>`;
