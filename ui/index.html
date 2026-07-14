@@ -59,6 +59,7 @@ header .meta{margin-left:auto;font-size:12px;color:var(--muted)}
 .ast{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.3px}
 .a-running,.a-stopping{background:rgba(88,166,255,.15);color:var(--accent);animation:pulse 2s infinite}
 .a-review{background:rgba(63,185,80,.15);color:var(--green)}
+.a-pr{background:rgba(88,166,255,.15);color:var(--accent)}
 .a-failed,.a-interrupted{background:rgba(248,81,73,.15);color:var(--red)}
 .sess{border-bottom:1px solid var(--border);padding:12px 20px;display:none;flex-shrink:0}
 .sess .srow{display:flex;align-items:center;gap:10px}
@@ -69,8 +70,11 @@ header .meta{margin-left:auto;font-size:12px;color:var(--muted)}
 .sbtn.ok{background:var(--green);border-color:var(--green);color:#fff}
 .sbtn.bad{color:var(--red);border-color:rgba(248,81,73,.4)}
 .slog{margin-top:10px;max-height:200px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:'SF Mono',Consolas,monospace;font-size:11px;line-height:1.5;white-space:pre-wrap}
+.sdiff{margin-top:10px;max-height:340px;overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:'SF Mono',Consolas,monospace;font-size:11px;line-height:1.5;white-space:pre}
+.sdiff .add{color:var(--green)}.sdiff .del{color:var(--red)}.sdiff .hunk{color:var(--accent)}.sdiff .meta{color:var(--muted)}.sdiff .trunc{color:var(--muted);font-style:italic}
 .ssum{margin-top:10px;font-size:13px}.ssum pre{margin-top:8px;font-size:11px;color:var(--muted);overflow-x:auto}
 .serr{margin-top:10px;font-size:12px;color:var(--red)}
+.slink{color:var(--accent);text-decoration:none}.slink:hover{text-decoration:underline}
 .card .acts{position:absolute;top:6px;right:6px;display:none;gap:2px}
 .card:hover .acts{display:flex}
 .card .acts button{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 5px;border-radius:3px;font-size:12px}
@@ -299,6 +303,33 @@ async function sact(a){
   notify(r.ok?a+' ok':a+' failed: '+(j.error||r.status));
   prev='';load();
 }
+function colorDiff(t){
+  return t.split('\n').map(l=>{
+    let cls='';
+    if(l.startsWith('+++')||l.startsWith('---')||l.startsWith('diff ')||l.startsWith('index '))cls='meta';
+    else if(l.startsWith('@@'))cls='hunk';
+    else if(l.startsWith('+'))cls='add';
+    else if(l.startsWith('-'))cls='del';
+    return `<div class="${cls}">${esc(l)||' '}</div>`;
+  }).join('');
+}
+async function toggleDiff(){
+  const ex=$('sdiff');if(ex){ex.remove();return}
+  if(!cur)return;
+  const r=await fetch(`/api/sessions/${encodeURIComponent(cur)}/diff`);
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){notify('Diff failed: '+(j.error||r.status));return}
+  const d=document.createElement('div');d.className='sdiff';d.id='sdiff';
+  d.innerHTML=colorDiff(j.diff||'')+(j.truncated?'<div class="trunc">…truncated…</div>':'');
+  $('p-sess').appendChild(d);
+}
+async function spr(){
+  if(!cur||!confirm('Push this branch to origin and open a GitHub PR?'))return;
+  const r=await fetch(`/api/sessions/${encodeURIComponent(cur)}/pr`,{method:'POST'});
+  const j=await r.json().catch(()=>({}));
+  notify(r.ok?'PR opened':'Open PR failed: '+(j.error||r.status));
+  prev='';load();
+}
 let logT=null;
 function renderSess(){
   const el=$('p-sess');clearInterval(logT);logT=null;
@@ -308,10 +339,12 @@ function renderSess(){
   const cost=s.cost!=null?`<span class="scost">$${s.cost.toFixed(4)}</span>`:'';
   let h=`<div class="srow"><span class="ast a-${s.status}">${s.status}</span>${cost}<code>${esc(s.branch||'')}</code><div class="sp"></div>`;
   if(s.status==='running')h+=`<button class="sbtn bad" onclick="sact('stop')">Stop</button>`;
-  if(s.status==='review'){if(s.commits)h+=`<button class="sbtn ok" onclick="sact('merge')">Merge</button>`;h+=`<button class="sbtn bad" onclick="sact('discard')">Discard</button>`}
+  if(s.status==='review'){if(s.commits)h+=`<button class="sbtn ok" onclick="sact('merge')">Merge</button><button class="sbtn" onclick="spr()">Open PR</button>`;h+=`<button class="sbtn" onclick="toggleDiff()">View diff</button><button class="sbtn bad" onclick="sact('discard')">Discard</button>`}
+  if(s.status==='pr')h+=`<button class="sbtn" onclick="toggleDiff()">View diff</button><button class="sbtn bad" onclick="sact('discard')">Discard</button>`;
   if(s.status==='failed'||s.status==='interrupted')h+=`<button class="sbtn" onclick="sact('retry')">Retry</button><button class="sbtn bad" onclick="sact('discard')">Discard</button>`;
   h+='</div>';
   if(s.status==='review')h+=`<div class="ssum">${md(s.summary||'')}${s.commits?`<pre>${esc(s.diffstat||'')}</pre>`:'<em>no changes were committed</em>'}</div>`;
+  if(s.status==='pr'&&s.prUrl)h+=`<div class="ssum"><a class="slink" href="${esc(s.prUrl||'')}" target="_blank" rel="noopener">${esc(s.prUrl||'')}</a></div>`;
   if(s.status==='failed'&&s.error)h+=`<div class="serr">${esc(s.error)}</div>`;
   if(s.status==='interrupted')h+=`<div class="serr">Server restarted mid-session. Take over: <code>claude --resume ${esc(s.sessionId||'?')}</code></div>`;
   if(s.status==='running'||s.status==='stopping')h+=`<pre class="slog" id="slog"></pre>`;
