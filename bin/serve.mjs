@@ -14,6 +14,7 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 const args = process.argv.slice(2);
 const AGENTS = args.includes("--agents") || process.env.KANBAN_AGENTS === "1";
+const REQUIRE_PR = args.includes("--require-pr") || process.env.KANBAN_REQUIRE_PR === "1";
 
 // Resolve board: CLI arg > env var > walk up from cwd to find .kanban/
 function findBoard() {
@@ -177,7 +178,11 @@ const server = createServer(async (req, res) => {
       const b = await getBoard();
       b.project = PROJECT;
       b.agents = AGENTS;
-      if (agents) b.sessions = await agents.sessions();
+      if (agents) {
+        b.sessions = await agents.sessions();
+        b.hasOrigin = await agents.hasOrigin();
+        b.requirePr = REQUIRE_PR;
+      }
       return json(res, b);
     }
 
@@ -296,6 +301,7 @@ const server = createServer(async (req, res) => {
           return json(res, { ok: true, url });
         }
         if (action === "merge") {
+          if (REQUIRE_PR) return json(res, { error: "local merge disabled by require-pr; use Open PR" }, 409);
           await agents.merge(id);
           const from = cardPath("doing", id);
           if (existsSync(from)) {
