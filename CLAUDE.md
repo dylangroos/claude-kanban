@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Claude Code plugin that provides a filesystem-based kanban board. Tasks are stored as markdown files in folder columns (`.kanban/todo/`, `.kanban/doing/`, `.kanban/done/`). No servers or databases required.
 
-The web UI (`bin/serve.mjs`) can optionally dispatch cards to Claude Code sessions: `bin/agents.mjs` manages these behind the `--agents` flag, running each session in its own git worktree/branch and tracking state as JSON in `.kanban/.agents/`. Finished sessions can be merged locally or pushed as a GitHub PR (requires an authed `gh` CLI; `KANBAN_GH_BIN` overrides the binary); `--require-pr` (or `KANBAN_REQUIRE_PR=1`) disables local merges and forces every session through a PR.
+The web UI (`bin/serve.mjs`) can optionally dispatch cards to Claude Code sessions: `bin/agents.mjs` manages these behind the `--agents` flag, running each session in its own git worktree/branch and tracking state as JSON in `.kanban/.agents/`. Finished sessions can be merged locally or pushed as a GitHub PR (requires an authed `gh` CLI; `KANBAN_GH_BIN` overrides the binary). PR is required by default whenever the repo has an `origin` — local merges are disabled and every session must go through a PR; `--allow-merge` (or `KANBAN_REQUIRE_PR=0`) restores local Merge, and `--require-pr` (or `KANBAN_REQUIRE_PR=1`) forces the gate even without an `origin`.
 
 ## Repository Structure
 
