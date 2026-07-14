@@ -101,8 +101,9 @@ Claude assigns projects automatically when it creates cards (it reuses existing 
 Enable with `npx dot-kanban --agents` (or `KANBAN_AGENTS=1`). A ▶ button appears on each card in the web UI — click it to dispatch that card to a Claude Code session.
 
 Each dispatch runs in an isolated git worktree on its own branch — `kanban/<card-id>`, with `/` in the id replaced by `--` (e.g. `kanban/api--do-thing`) — so your checkout is untouched while the agent works. Watch it live in the session panel, then when it finishes:
-- **Review** the diff and summary on the card
-- **Merge** to merge the branch into your checkout (a merge commit, `--no-ff`) and clean up the worktree, or
+- **Review** the summary and full diff on the card (**View diff**)
+- **Merge** to merge the branch into your checkout (a merge commit, `--no-ff`) and clean up the worktree,
+- **Open PR** to push the branch to `origin` and open a GitHub PR from the card title and agent summary — needs the [`gh` CLI](https://cli.github.com) installed and authed (`gh auth status`), an `origin` remote, and a checked-out branch as base (detached HEAD is rejected). The card stays in doing with a link to the PR; discard it later to drop the local branch, or
 - **Discard** to drop the branch and return the card to todo
 
 Env knobs:
@@ -110,6 +111,7 @@ Env knobs:
 - `KANBAN_AGENT_TOOLS` - allowed tools passed to the agent (default `Bash(git *),Bash(npm test*),Bash(npm run *)`)
   The allowlist is your real safety boundary — a dispatched worker can run anything it matches, so widen it deliberately.
 - `KANBAN_CLAUDE_BIN` - path to the `claude` binary (default `claude`)
+- `KANBAN_GH_BIN` - path to the `gh` binary used by Open PR (default `gh`)
 
 If the agent tries a command outside `KANBAN_AGENT_TOOLS`, the session fails fast rather than prompting — widen the allowlist and retry. Session metadata lives in `.kanban/.agents/`; add it to `.gitignore`. The server only binds `127.0.0.1`, agents mode included.
 

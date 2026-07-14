@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Claude Code plugin that provides a filesystem-based kanban board. Tasks are stored as markdown files in folder columns (`.kanban/todo/`, `.kanban/doing/`, `.kanban/done/`). No servers or databases required.
 
-The web UI (`bin/serve.mjs`) can optionally dispatch cards to Claude Code sessions: `bin/agents.mjs` manages these behind the `--agents` flag, running each session in its own git worktree/branch and tracking state as JSON in `.kanban/.agents/`.
+The web UI (`bin/serve.mjs`) can optionally dispatch cards to Claude Code sessions: `bin/agents.mjs` manages these behind the `--agents` flag, running each session in its own git worktree/branch and tracking state as JSON in `.kanban/.agents/`. Finished sessions can be merged locally or pushed as a GitHub PR (requires an authed `gh` CLI; `KANBAN_GH_BIN` overrides the binary).
 
 ## Repository Structure
 

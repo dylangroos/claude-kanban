@@ -281,14 +281,20 @@ const server = createServer(async (req, res) => {
       return json(res, { ok: true });
     }
 
-    // API: POST /api/sessions/:id/(stop|merge|discard|retry), GET /api/sessions/:id/log
+    // API: POST /api/sessions/:id/(stop|merge|discard|retry|pr), GET /api/sessions/:id/(log|diff)
     if (AGENTS && path.match(/^\/api\/sessions\/[^/]+\/[a-z]+$/)) {
       const [, , , rawId, action] = path.split("/");
       const id = decodeURIComponent(rawId);
       try {
         if (action === "log" && req.method === "GET") return json(res, { log: await agents.log(id) });
+        if (action === "diff" && req.method === "GET") return json(res, await agents.diff(id));
         if (req.method !== "POST") return json(res, { error: "method" }, 405);
         if (action === "stop") { await agents.stop(id); return json(res, { ok: true }); }
+        if (action === "pr") {
+          const { slug } = splitId(id);
+          const { url } = await agents.openPr(id, { title: slug.replace(/-/g, " ") });
+          return json(res, { ok: true, url });
+        }
         if (action === "merge") {
           await agents.merge(id);
           const from = cardPath("doing", id);

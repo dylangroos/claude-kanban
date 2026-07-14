@@ -9,6 +9,7 @@ const exec = promisify(execFile);
 const MAX = parseInt(process.env.KANBAN_MAX_AGENTS || "3", 10);
 const TOOLS = process.env.KANBAN_AGENT_TOOLS || "Bash(git *),Bash(npm test*),Bash(npm run *)";
 const LOG_CAP = 2000;
+const DIFF_CAP = 200_000;
 
 export function createAgentManager({ board, repoRoot }) {
   const bin = process.env.KANBAN_CLAUDE_BIN || "claude";
@@ -21,6 +22,7 @@ export function createAgentManager({ board, repoRoot }) {
   const branchOf = (id) => `kanban/${flat(id)}`;
 
   const git = async (a, cwd = repoRoot) => (await exec("git", a, { cwd })).stdout.trim();
+  const errTail = (err, fallback) => (err.stderr || err.stdout || "").toString().trim().split("\n").pop() || fallback;
 
   async function readMeta(id) {
     try { return JSON.parse(await readFile(metaPath(id), "utf8")); } catch { return null; }
@@ -45,10 +47,14 @@ export function createAgentManager({ board, repoRoot }) {
     }
   }
 
-  async function cleanupArtifacts(id) {
+  async function removeWorktree(id) {
     await git(["worktree", "remove", "--force", wtPath(id)]).catch(() => {});
     await rm(wtPath(id), { recursive: true, force: true }).catch(() => {});
     await git(["worktree", "prune"]).catch(() => {});
+  }
+
+  async function cleanupArtifacts(id) {
+    await removeWorktree(id);
     await git(["branch", "-D", branchOf(id)]).catch(() => {});
   }
 
@@ -161,8 +167,7 @@ export function createAgentManager({ board, repoRoot }) {
       await git(["merge", "--no-ff", "--no-edit", meta.branch]);
     } catch (mergeErr) {
       await git(["merge", "--abort"]).catch(() => {});
-      const detail = (mergeErr.stderr || mergeErr.stdout || "").toString().trim().split("\n").pop() || "merge failed";
-      const e = new Error(`${detail}; branch preserved: ${meta.branch}`);
+      const e = new Error(`${errTail(mergeErr, "merge failed")}; branch preserved: ${meta.branch}`);
       e.code = "conflict"; throw e;
     }
     await cleanupArtifacts(id);
@@ -170,14 +175,60 @@ export function createAgentManager({ board, repoRoot }) {
     live.delete(flat(id));
   }
 
+  async function openPr(id, { title }) {
+    const meta = await readMeta(id);
+    if (!meta || meta.status !== "review" || !meta.commits) {
+      const e = new Error("not in review"); e.code = "state"; throw e;
+    }
+    const ghBin = process.env.KANBAN_GH_BIN || "gh";
+    try {
+      await git(["remote", "get-url", "origin"]);
+    } catch (originErr) {
+      const e = new Error(errTail(originErr, "no origin remote")); e.code = "conflict"; throw e;
+    }
+    try {
+      await git(["push", "origin", `${meta.branch}:${meta.branch}`]);
+      const base = await git(["rev-parse", "--abbrev-ref", "HEAD"]);
+      const body = meta.summary || `Automated changes from kanban worker session ${id}.`;
+      const { stdout } = await exec(ghBin, [
+        "pr", "create",
+        "--head", meta.branch, "--base", base,
+        "--title", title, "--body", body,
+      ], { cwd: repoRoot });
+      const url = stdout.toString().trim().split("\n").filter(Boolean).pop();
+      meta.status = "pr";
+      meta.prUrl = url;
+      await writeMeta(meta);
+      await removeWorktree(id);
+      live.delete(flat(id));
+      return { url };
+    } catch (prErr) {
+      const e = new Error(errTail(prErr, prErr.message || "pr creation failed")); e.code = "conflict"; throw e;
+    }
+  }
+
   async function discard(id) {
     const meta = await readMeta(id);
-    if (!meta || !["review", "failed", "interrupted"].includes(meta.status)) {
+    if (!meta || !["review", "failed", "interrupted", "pr"].includes(meta.status)) {
       const e = new Error("nothing to discard"); e.code = "state"; throw e;
     }
     await cleanupArtifacts(id);
     await rm(metaPath(id), { force: true });
     live.delete(flat(id));
+  }
+
+  async function diff(id) {
+    const meta = await readMeta(id);
+    if (!meta) { const e = new Error("no such session"); e.code = "state"; throw e; }
+    try {
+      const { stdout } = await exec("git", ["diff", "--no-color", `${meta.base}..${meta.branch}`], {
+        cwd: repoRoot, maxBuffer: 12 * 1024 * 1024,
+      });
+      const out = stdout.toString();
+      return { diff: out.slice(0, DIFF_CAP), truncated: out.length > DIFF_CAP };
+    } catch (diffErr) {
+      const e = new Error(errTail(diffErr, "diff failed")); e.code = "state"; throw e;
+    }
   }
 
   async function log(id) {
@@ -196,7 +247,7 @@ export function createAgentManager({ board, repoRoot }) {
         out[m.id] = {
           status: m.status, cost: m.cost, branch: m.branch, summary: m.summary,
           error: m.error, sessionId: m.sessionId, commits: m.commits ?? null,
-          diffstat: m.diffstat ?? null, startedAt: m.startedAt,
+          diffstat: m.diffstat ?? null, startedAt: m.startedAt, prUrl: m.prUrl ?? null,
         };
       } catch {}
     }
@@ -209,5 +260,5 @@ export function createAgentManager({ board, repoRoot }) {
     }
   }
 
-  return { init, dispatch, stop, merge, discard, log, sessions, shutdown };
+  return { init, dispatch, stop, merge, discard, log, sessions, shutdown, diff, openPr };
 }
