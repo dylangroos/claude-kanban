@@ -44,6 +44,8 @@ assert_eq "$(curl -s -X POST localhost:$PORT/api/cards/api%2Fdo-thing/work)" '{"
 sleep 2
 assert_eq "$(jget /api/board "b.sessions['api/do-thing'].status")" "review" "status after run"
 assert_eq "$(jget /api/board "b.sessions['api/do-thing'].commits")" "1" "one commit"
+assert_eq "$(jget /api/board "b.hasOrigin")" "true" "hasOrigin true"
+assert_eq "$(jget /api/board "b.requirePr")" "false" "requirePr false"
 assert_eq "$(jget /api/sessions/api%2Fdo-thing/log "b.log.includes('Working on')")" "true" "log content"
 assert_eq "$(curl -s -X POST localhost:$PORT/api/sessions/api%2Fdo-thing/merge)" '{"ok":true}' "merge"
 [ -f "$REPO/.kanban/done/api/do-thing.md" ] || fail "card not in done"
@@ -66,6 +68,7 @@ AGENTS_FLAG="" start
 assert_eq "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:$PORT/api/cards/api%2Fsecond-thing/work)" "404" "work route gated"
 assert_eq "$(jget /api/board "b.agents")" "false" "agents false"
 assert_eq "$(jget /api/board "'sessions' in b")" "false" "no sessions key"
+assert_eq "$(jget /api/board "'requirePr' in b")" "false" "no requirePr key"
 stop_srv
 
 # --- merge conflict aborts cleanly ---
@@ -129,6 +132,7 @@ assert_eq "$(jget /api/board "'api/pr-thing' in (b.sessions||{})")" "false" "pr 
 
 # --- PR with no origin remote ---
 git -C "$REPO" remote remove origin
+assert_eq "$(jget /api/board "b.hasOrigin")" "false" "hasOrigin false"
 printf "no origin card\n" > "$REPO/.kanban/todo/api/pr-noorigin.md"
 assert_eq "$(curl -s -X POST localhost:$PORT/api/cards/api%2Fpr-noorigin/work)" '{"ok":true}' "dispatch(pr-noorigin)"
 sleep 2
@@ -151,6 +155,30 @@ assert_eq "$(jexpr "$pr_body" "/not authenticated/.test(b.error)")" "true" "gh f
 assert_eq "$(jget /api/board "b.sessions['api/pr-ghfail'].status")" "review" "status stays review after gh failure (retryable)"
 [ -f "$REPO/.kanban/doing/api/pr-ghfail.md" ] || fail "pr-ghfail card should still be in doing"
 curl -s -X POST localhost:$PORT/api/sessions/api%2Fpr-ghfail/discard >/dev/null
+stop_srv
+
+# --- require-pr gate ---
+AGENTS_FLAG="--agents --require-pr" start
+printf "require pr card\n" > "$REPO/.kanban/todo/api/require-pr-card.md"
+assert_eq "$(curl -s -X POST localhost:$PORT/api/cards/api%2Frequire-pr-card/work)" '{"ok":true}' "dispatch(require-pr-card)"
+sleep 2
+assert_eq "$(jget /api/board "b.sessions['api/require-pr-card'].status")" "review" "require-pr-card in review"
+assert_eq "$(jget /api/board "b.requirePr")" "true" "requirePr true"
+resp="$(curl -s -w '\n%{http_code}' -X POST localhost:$PORT/api/sessions/api%2Frequire-pr-card/merge)"
+merge_code="$(printf '%s' "$resp" | tail -n1)"
+merge_body="$(printf '%s' "$resp" | sed '$d')"
+assert_eq "$merge_code" "409" "merge gated by require-pr → 409"
+assert_eq "$(jexpr "$merge_body" "/require-pr/.test(b.error) && /Open PR/.test(b.error)")" "true" "gate error mentions require-pr and Open PR"
+assert_eq "$(jget /api/board "b.sessions['api/require-pr-card'].status")" "review" "still review after gated merge"
+[ -f "$REPO/.kanban/doing/api/require-pr-card.md" ] || fail "require-pr-card should stay in doing"
+post_pr api%2Frequire-pr-card
+assert_eq "$pr_code" "200" "pr still works under require-pr"
+curl -s -X POST localhost:$PORT/api/sessions/api%2Frequire-pr-card/discard >/dev/null
+stop_srv
+
+# --- require-pr via env var ---
+AGENTS_FLAG=--agents start KANBAN_REQUIRE_PR=1
+assert_eq "$(jget /api/board "b.requirePr")" "true" "requirePr true via env"
 stop_srv
 
 echo PASS

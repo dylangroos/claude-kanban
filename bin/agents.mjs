@@ -217,6 +217,10 @@ export function createAgentManager({ board, repoRoot }) {
     live.delete(flat(id));
   }
 
+  async function hasOrigin() {
+    try { await git(["remote", "get-url", "origin"]); return true; } catch { return false; }
+  }
+
   async function diff(id) {
     const meta = await readMeta(id);
     if (!meta) { const e = new Error("no such session"); e.code = "state"; throw e; }
@@ -260,5 +264,5 @@ export function createAgentManager({ board, repoRoot }) {
     }
   }
 
-  return { init, dispatch, stop, merge, discard, log, sessions, shutdown, diff, openPr };
+  return { init, dispatch, stop, merge, discard, log, sessions, shutdown, diff, openPr, hasOrigin };
 }
