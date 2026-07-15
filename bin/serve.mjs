@@ -95,6 +95,12 @@ async function getBoard() {
       }
     }
   }
+  const done = new Set(board.done.map((c) => c.id));
+  for (const col of COLUMNS) {
+    for (const c of board[col]) {
+      if (c.needs.some((n) => !done.has(n))) c.blocked = true;
+    }
+  }
   board.projects = [...projects].sort();
   return board;
 }
@@ -110,7 +116,18 @@ async function readCard(path, file, project) {
     project,
     body,
     priority: meta.priority || meta.p || null,
+    needs: parseNeeds(meta.needs),
   };
+}
+
+// "a, b" or "[a, b]" → ["a", "b"]
+function parseNeeds(v) {
+  if (!v) return [];
+  return v.replace(/^\[|\]$/g, "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function isDone(id) {
+  try { return existsSync(cardPath("done", id)); } catch { return false; }
 }
 
 // Simple slug
@@ -272,7 +289,9 @@ const server = createServer(async (req, res) => {
       const src = cardPath("todo", id);
       if (!existsSync(src)) return json(res, { error: "card not in todo" }, 404);
       const { project, slug } = splitId(id);
-      const { body: cardBody } = parseFrontmatter(await readFile(src));
+      const { meta, body: cardBody } = parseFrontmatter(await readFile(src));
+      const unmet = parseNeeds(meta.needs).find((n) => !isDone(n));
+      if (unmet) return json(res, { error: `blocked by ${unmet}` }, 409);
       const dst = cardPath("doing", id);
       await mkdir(dirname(dst), { recursive: true });
       await rename(src, dst);

@@ -40,6 +40,16 @@ p: high
 Users can't log in on Safari.
 ```
 
+**With dependencies** (`add-logout.md`):
+```
+---
+needs: [auth/setup-jwt, add-login-form]
+---
+Implement logout and token invalidation.
+```
+
+`needs:` lists ids of prerequisite cards — `project/slug` for a card in a project folder, bare `slug` for one at the column root. A card is blocked (no agent dispatch) until every listed card is in `done/`.
+
 ## Projects — assign them yourself
 
 The user should never have to categorize cards by hand. When creating cards:
