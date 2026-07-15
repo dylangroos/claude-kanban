@@ -44,7 +44,7 @@ Open PR pushes `<branch>:<branch>` to `origin`, then runs `gh pr create --head <
 
 | Var | Default | Notes |
 |---|---|---|
-| `KANBAN_MAX_AGENTS` | `3` | concurrent running-session cap |
+| `KANBAN_MAX_AGENTS` | `3` | concurrent running-session cap (`0` = unlimited) |
 | `KANBAN_AGENT_TOOLS` | `Bash(git *),Bash(npm test*),Bash(npm run *)` | passed as `--allowedTools`; **the real security boundary** — a dispatched worker can run anything it matches, widen deliberately |
 | `KANBAN_CLAUDE_BIN` | `claude` | binary used to spawn the worker |
 | `KANBAN_GH_BIN` | `gh` | binary used by Open PR |

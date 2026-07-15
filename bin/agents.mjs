@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 
 const exec = promisify(execFile);
-const MAX = parseInt(process.env.KANBAN_MAX_AGENTS || "3", 10);
+const MAX = parseInt(process.env.KANBAN_MAX_AGENTS || "3", 10) || Infinity; // 0 = no limit
 const TOOLS = process.env.KANBAN_AGENT_TOOLS || "Bash(git *),Bash(npm test*),Bash(npm run *)";
 const LOG_CAP = 2000;
 const DIFF_CAP = 200_000;

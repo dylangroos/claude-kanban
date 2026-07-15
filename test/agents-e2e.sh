@@ -214,4 +214,23 @@ assert_eq "$(jget /api/board "b.sessions['api/dep-a'].status")" "review" "dep-a 
 curl -s -X POST localhost:$PORT/api/sessions/api%2Fdep-a/discard >/dev/null
 stop_srv
 
+# --- KANBAN_MAX_AGENTS=0 → unlimited concurrency ---
+AGENTS_FLAG="--agents --allow-merge" start KANBAN_MAX_AGENTS=0 FAKE_CLAUDE_SLEEP=5
+for i in 1 2 3 4; do printf "uncap card %s\n" "$i" > "$REPO/.kanban/todo/api/uncap-$i.md"; done
+for i in 1 2 3 4; do
+  assert_eq "$(curl -s -X POST localhost:$PORT/api/cards/api%2Funcap-$i/work)" '{"ok":true}' "dispatch(uncap-$i)"
+done
+sleep 1
+for i in 1 2 3 4; do
+  assert_eq "$(jget /api/board "b.sessions['api/uncap-$i'].status")" "running" "uncap-$i running simultaneously"
+done
+for i in 1 2 3 4; do
+  curl -s -X POST "localhost:$PORT/api/sessions/api%2Funcap-$i/stop" >/dev/null
+done
+sleep 1
+for i in 1 2 3 4; do
+  curl -s -X POST "localhost:$PORT/api/sessions/api%2Funcap-$i/discard" >/dev/null
+done
+stop_srv
+
 echo PASS

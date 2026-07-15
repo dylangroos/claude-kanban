@@ -109,7 +109,7 @@ Each dispatch runs in an isolated git worktree on its own branch — `kanban/<ca
 When an `origin` remote is configured, PR is required by default: Open PR is the only action shown, and local merges 409 server-side too, as a backstop. Pass `--allow-merge` (or `KANBAN_REQUIRE_PR=0`) to restore local Merge alongside Open PR. Repos with no `origin` are unaffected — only Merge is offered, since Open PR would just 409. `--require-pr` (or `KANBAN_REQUIRE_PR=1`) forces the PR-only gate even without an `origin`.
 
 Env knobs:
-- `KANBAN_MAX_AGENTS` - concurrent session cap (default 3)
+- `KANBAN_MAX_AGENTS` - concurrent session cap (default 3, `0` = unlimited)
 - `KANBAN_AGENT_TOOLS` - allowed tools passed to the agent (default `Bash(git *),Bash(npm test*),Bash(npm run *)`)
   The allowlist is your real safety boundary — a dispatched worker can run anything it matches, so widen it deliberately.
 - `KANBAN_CLAUDE_BIN` - path to the `claude` binary (default `claude`)
