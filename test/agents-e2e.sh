@@ -192,4 +192,26 @@ AGENTS_FLAG=--agents start KANBAN_REQUIRE_PR=0
 assert_eq "$(jget /api/board "b.requirePr")" "false" "requirePr false via KANBAN_REQUIRE_PR=0"
 stop_srv
 
+# --- card dependencies gate dispatch ---
+AGENTS_FLAG="--agents --allow-merge" start
+printf -- "---\nneeds: [api/dep-b]\n---\nDepends on B.\n" > "$REPO/.kanban/todo/api/dep-a.md"
+printf "Dep B.\n" > "$REPO/.kanban/todo/api/dep-b.md"
+assert_eq "$(jget /api/board "b.todo.find(c=>c.id==='api/dep-a').needs.join()")" "api/dep-b" "needs parsed"
+assert_eq "$(jget /api/board "b.todo.find(c=>c.id==='api/dep-a').blocked===true")" "true" "dep-a blocked"
+assert_eq "$(jget /api/board "'blocked' in b.todo.find(c=>c.id==='api/dep-b')")" "false" "dep-b not blocked"
+resp="$(curl -s -w '\n%{http_code}' -X POST localhost:$PORT/api/cards/api%2Fdep-a/work)"
+work_code="$(printf '%s' "$resp" | tail -n1)"
+work_body="$(printf '%s' "$resp" | sed '$d')"
+assert_eq "$work_code" "409" "blocked work → 409"
+assert_eq "$(jexpr "$work_body" "b.error.includes('blocked by api/dep-b')")" "true" "blocked error names dep"
+[ -f "$REPO/.kanban/todo/api/dep-a.md" ] || fail "blocked card should stay in todo"
+mkdir -p "$REPO/.kanban/done/api"
+mv "$REPO/.kanban/todo/api/dep-b.md" "$REPO/.kanban/done/api/"
+assert_eq "$(jget /api/board "'blocked' in b.todo.find(c=>c.id==='api/dep-a')")" "false" "dep-a unblocked once dep done"
+assert_eq "$(curl -s -X POST localhost:$PORT/api/cards/api%2Fdep-a/work)" '{"ok":true}' "work after dep done"
+sleep 2
+assert_eq "$(jget /api/board "b.sessions['api/dep-a'].status")" "review" "dep-a in review"
+curl -s -X POST localhost:$PORT/api/sessions/api%2Fdep-a/discard >/dev/null
+stop_srv
+
 echo PASS
